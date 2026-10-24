@@ -1,6 +1,13 @@
 'use strict';
 
-// All sound is synthesised with WebAudio, so the game has no audio assets to load.
+// Background tracks, played in turn on a loop.
+const MUSIC_TRACKS = [
+  'music/Airwolf Theme Extended HD 1080P HD [youaretube.com].mp3',
+  'music/You Havent Heard The Airwolf Theme Like This [youaretube.com].mp3',
+];
+const MUSIC_VOLUME = 0.35;
+
+// Sound effects are synthesised with WebAudio; only the background music is loaded from files.
 const Sfx = {
   ctx: null,
   master: null,
@@ -10,12 +17,16 @@ const Sfx = {
   rotorState: '',
   lastGun: 0,
   lastEnemyGun: 0,
+  music: null,
+  track: 0,
 
   init() {
     if (this.ctx) {
       if (this.ctx.state === 'suspended') this.ctx.resume();
+      if (this.music && this.music.paused && !this.muted && !document.hidden) this.music.play().catch(() => {});
       return;
     }
+    this.startMusic();
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     const ctx = (this.ctx = new AC());
@@ -150,8 +161,32 @@ const Sfx = {
     setTimeout(() => this.tone({ f0: 990, dur: 0.12, type: 'square', gain: 0.06 }), 80);
   },
 
+  // Browsers only allow playback after a user gesture, so this runs from init().
+  startMusic() {
+    const music = (this.music = new Audio());
+    music.volume = MUSIC_VOLUME;
+    music.preload = 'auto';
+    const play = () => {
+      music.src = encodeURI(MUSIC_TRACKS[this.track]);
+      if (!this.muted && !document.hidden) music.play().catch(() => {});
+    };
+    music.addEventListener('ended', () => {
+      this.track = (this.track + 1) % MUSIC_TRACKS.length;
+      play();
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) music.pause();
+      else if (!this.muted) music.play().catch(() => {});
+    });
+    play();
+  },
+
   toggleMute() {
     this.muted = !this.muted;
     if (this.master) this.master.gain.value = this.muted ? 0 : 0.5;
+    if (this.music) {
+      if (this.muted) this.music.pause();
+      else this.music.play().catch(() => {});
+    }
   },
 };

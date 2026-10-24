@@ -1,6 +1,6 @@
 # Chopper Gunner
 
-A top-down helicopter gunship game for the browser, drawn on a single canvas. There's no build step and no dependencies. All sound is synthesised with WebAudio.
+A top-down helicopter gunship game for the browser, drawn on a single canvas. There's no build step and no dependencies. Sound effects are synthesised with WebAudio. Background music plays from the MP3s in `music/`, one track after the other on a loop, starting with your first key press or click. M mutes the music along with everything else. To change the tracks, edit `MUSIC_TRACKS` in `src/audio.js`.
 
 ## Running it
 
