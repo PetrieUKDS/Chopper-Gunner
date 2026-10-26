@@ -52,6 +52,12 @@ The mouse also works for aiming and firing. On phones and tablets you get twin-s
 
 Land on your base pad to repair and rearm. Your guns overheat if you hold the trigger too long. Flares break enemy missile locks.
 
+## Sprites and vehicles
+
+Every sprite is drawn in code in `src/entities.js`, lit from the top-left to match the shadows. Open `sprites.html` (served the same way as the game) to see them all at 2× size.
+
+The player's helicopter is defined in the `VEHICLES` list in `src/entities.js`. Each entry sets how the aircraft looks (its draw function and colours) and how it handles (armour, missiles, flares, cruise speed and turbo speed). Stormwolf is the only one so far. A vehicle selector can add more entries and pass the chosen one to `new Player(x, y, vehicle)`.
+
 ## Missions
 
 1. **Operation Sandstorm**: militia forces hold three surface-to-air missile sites in the interior. Destroy all three. Each site is guarded by armour and light vehicles.

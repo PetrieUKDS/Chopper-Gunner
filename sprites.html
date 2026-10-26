@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chopper Gunner Sprites</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    html, body { margin: 0; background: #05070a; color: #7dffb0; font: 14px "Share Tech Mono", monospace; }
+    h1 { font: 900 22px Orbitron, sans-serif; color: #ffc04a; margin: 16px; }
+    p { margin: 0 16px 12px; color: #9aa8a0; }
+    canvas { display: block; margin: 0 16px 16px; max-width: calc(100vw - 32px); }
+  </style>
+</head>
+<body>
+  <h1>SPRITE GALLERY</h1>
+  <p>Every in-game sprite at 2× size, on land. Reload to see the rotors and lights in a new position.</p>
+  <canvas id="sheet"></canvas>
+  <script src="src/util.js"></script>
+  <script src="src/audio.js"></script>
+  <script src="src/music.js"></script>
+  <script src="src/input.js"></script>
+  <script src="src/terrain.js"></script>
+  <script src="src/entities.js"></script>
+  <script>
+    'use strict';
+    const SCALE = 2;
+    const CELL = 150;
+    const cols = 4;
+
+    const make = {
+      player: (v) => Object.assign(new Player(0, 0, v), { angle: -0.6, rotor: Math.random() * TAU }),
+      gunship: () => Object.assign(new Gunship(0, 0, 1), { angle: -0.6 }),
+      boss: () => Object.assign(new Boss(0, 0, 1), { angle: -0.6 }),
+      jet: () => Object.assign(new Jet(0, 0, 1, -0.6, 1), { angle: -0.6 }),
+      jeep: () => Object.assign(new Jeep(0, 0, 1), { angle: -0.6, turret: 0.4 }),
+      truck: () => Object.assign(new Truck([{ x: 0, y: 0 }, { x: 100, y: 0 }], 0, 1), { angle: -0.6 }),
+      tank: () => Object.assign(new Tank(0, 0, 1), { angle: -0.6, turret: 0.3 }),
+      sam: () => Object.assign(new SamSite(0, 0, 1), { turret: -0.8, dish: 0.6 }),
+    };
+
+    const items = [
+      ...Object.values(VEHICLES).map((v) => ({ label: v.name + ' (PLAYER)', e: make.player(v), zoom: 1 })),
+      { label: 'GUNSHIP', e: make.gunship(), zoom: 1 },
+      { label: 'RED TALON (BOSS)', e: make.boss(), zoom: 0.7 },
+      { label: 'JET', e: make.jet(), zoom: 1 },
+      { label: 'JEEP', e: make.jeep(), zoom: 1.4 },
+      { label: 'TRUCK', e: make.truck(), zoom: 1.2 },
+      { label: 'TANK', e: make.tank(), zoom: 1.2 },
+      { label: 'SAM SITE', e: make.sam(), zoom: 1.1 },
+    ];
+
+    const canvas = document.getElementById('sheet');
+    const rows = Math.ceil(items.length / cols);
+    const W = cols * CELL * SCALE, H = rows * CELL * SCALE;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    items.forEach((it, i) => {
+      const cx = (i % cols) * CELL * SCALE, cy = Math.floor(i / cols) * CELL * SCALE;
+      ctx.fillStyle = i % 2 ? '#a99a6c' : '#7d8a52';
+      ctx.fillRect(cx, cy, CELL * SCALE, CELL * SCALE);
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.strokeRect(cx + 0.5, cy + 0.5, CELL * SCALE - 1, CELL * SCALE - 1);
+      ctx.save();
+      ctx.translate(cx + (CELL * SCALE) / 2, cy + (CELL * SCALE) / 2 + 10);
+      ctx.scale(SCALE * it.zoom, SCALE * it.zoom);
+      // Air units cast their shadow far below; pull it in so it fits the cell.
+      ctx.save();
+      if (it.e.air || it.e instanceof Player) ctx.translate(-14, -18);
+      it.e.drawShadow(ctx);
+      ctx.restore();
+      it.e.draw(ctx);
+      ctx.restore();
+      ctx.font = '13px "Share Tech Mono", monospace';
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(cx, cy, CELL * SCALE, 22);
+      ctx.fillStyle = '#7dffb0';
+      ctx.fillText(it.label, cx + 8, cy + 15);
+    });
+  </script>
+</body>
+</html>
