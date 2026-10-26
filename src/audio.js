@@ -1,13 +1,7 @@
 'use strict';
 
-// Background tracks, played in turn on a loop.
-const MUSIC_TRACKS = [
-  'music/Airwolf Theme Extended HD 1080P HD [youaretube.com].mp3',
-  'music/You Havent Heard The Airwolf Theme Like This [youaretube.com].mp3',
-];
-const MUSIC_VOLUME = 0.35;
-
-// Sound effects are synthesised with WebAudio; only the background music is loaded from files.
+// All sound is synthesised with WebAudio, so the game has no audio assets to load.
+// The music sequencer lives in music.js.
 const Sfx = {
   ctx: null,
   master: null,
@@ -17,16 +11,12 @@ const Sfx = {
   rotorState: '',
   lastGun: 0,
   lastEnemyGun: 0,
-  music: null,
-  track: 0,
 
   init() {
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') this.ctx.resume();
-      if (this.music && this.music.paused && !this.muted && !document.hidden) this.music.play().catch(() => {});
+      if (this.ctx.state === 'suspended' && !document.hidden) this.ctx.resume();
       return;
     }
-    this.startMusic();
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     const ctx = (this.ctx = new AC());
@@ -40,6 +30,12 @@ const Sfx = {
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     this.noiseBuf = buf;
     this.startRotor();
+    // Timers are throttled in background tabs, so pause all audio rather than let the music stutter.
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) ctx.suspend();
+      else ctx.resume();
+    });
+    Music.play(Music.want);
   },
 
   noise({ dur = 0.2, type = 'lowpass', f0 = 1000, f1 = null, q = 1, gain = 0.3, attack = 0.002 }) {
@@ -161,32 +157,8 @@ const Sfx = {
     setTimeout(() => this.tone({ f0: 990, dur: 0.12, type: 'square', gain: 0.06 }), 80);
   },
 
-  // Browsers only allow playback after a user gesture, so this runs from init().
-  startMusic() {
-    const music = (this.music = new Audio());
-    music.volume = MUSIC_VOLUME;
-    music.preload = 'auto';
-    const play = () => {
-      music.src = encodeURI(MUSIC_TRACKS[this.track]);
-      if (!this.muted && !document.hidden) music.play().catch(() => {});
-    };
-    music.addEventListener('ended', () => {
-      this.track = (this.track + 1) % MUSIC_TRACKS.length;
-      play();
-    });
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) music.pause();
-      else if (!this.muted) music.play().catch(() => {});
-    });
-    play();
-  },
-
   toggleMute() {
     this.muted = !this.muted;
     if (this.master) this.master.gain.value = this.muted ? 0 : 0.5;
-    if (this.music) {
-      if (this.muted) this.music.pause();
-      else this.music.play().catch(() => {});
-    }
   },
 };

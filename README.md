@@ -1,6 +1,18 @@
 # Chopper Gunner
 
-A top-down helicopter gunship game for the browser, drawn on a single canvas. There's no build step and no dependencies. Sound effects are synthesised with WebAudio. Background music plays from the MP3s in `music/`, one track after the other on a loop, starting with your first key press or click. M mutes the music along with everything else. To change the tracks, edit `MUSIC_TRACKS` in `src/audio.js`.
+A top-down helicopter gunship game for the browser, drawn on a single canvas. There's no build step and no dependencies. All sound, music included, is synthesised live with WebAudio, so there are no audio files.
+
+## Music
+
+Each mission has its own original synth soundtrack, in the style of 80s TV action themes. Each one plays a short intro, then loops a groove section and a lead melody section:
+
+| Mission | Track | Tempo | Key |
+| --- | --- | --- | --- |
+| Operation Sandstorm (also the title screen) | Sandstorm | 132 BPM | A minor |
+| Operation Iron Road | Iron Road | 144 BPM | E minor |
+| Operation Red Talon | Red Talon | 116 BPM | D minor |
+
+The music starts with your first key press or click, because browsers won't play sound before that. M mutes it along with the sound effects, and it pauses while the tab is hidden. The songs are written as note data in `src/music.js`: chords, bass and drum patterns, and the melody, one bar of sixteenth notes per line. They were composed for this game, so you're free to use, change and redistribute them with it.
 
 ## Running it
 
