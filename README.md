@@ -10,6 +10,9 @@ Each mission has its own original synth soundtrack, in the style of 80s TV actio
 | --- | --- | --- | --- |
 | Operation Sandstorm (also the title screen) | Sandstorm | 132 BPM | A minor |
 | Operation Iron Road | Iron Road | 144 BPM | E minor |
+| Operation Frostbite | Frostbite | 124 BPM | F# minor |
+| Operation Green Hell | Green Hell | 138 BPM | G minor |
+| Operation Black Gold | Black Gold | 150 BPM | C minor |
 | Operation Red Talon | Red Talon | 116 BPM | D minor |
 
 The music starts with your first key press or click, because browsers won't play sound before that. M mutes it along with the sound effects, and it pauses while the tab is hidden. The songs are written as note data in `src/music.js`: chords, bass and drum patterns, and the melody, one bar of sixteenth notes per line. They were composed for this game, so you're free to use, change and redistribute them with it.
@@ -70,8 +73,17 @@ Every sprite is drawn in code in `src/entities.js`, lit from the top-left to mat
 
 ## Missions
 
-1. **Operation Sandstorm**: militia forces hold three surface-to-air missile sites in the interior. Destroy all three. Each site is guarded by armour and light vehicles.
-2. **Operation Iron Road**: an arms convoy is driving along the highway to the northern border. Destroy every truck. If more than two trucks get across, the mission fails. The escorts will call in air cover.
-3. **Operation Red Talon**: hunt down RED TALON, a stolen prototype gunship hiding in the far hills under SAM cover, and destroy it.
+Each mission is fought in its own theatre, with its own island layout, ground and sea colours, and plant life. Enemy vehicles are painted in matching camouflage.
 
-After the third mission the campaign starts over with tougher enemies.
+| # | Mission | Theatre | Objective |
+| --- | --- | --- | --- |
+| 1 | **Operation Sandstorm** | Southern Desert: sand, palm oases, turquoise shallows | Destroy the three SAM sites in the interior. Each is guarded by armour and light vehicles. |
+| 2 | **Operation Iron Road** | Central Valleys: green farmland and woods | Destroy the arms convoy on the highway. If more than two trucks reach the border, the mission fails. |
+| 3 | **Operation Frostbite** | Northern Tundra: snow, pack ice, snowy pines | Destroy five fuel depots ringed by anti-aircraft guns. Depots explode violently and damage anything close by. |
+| 4 | **Operation Green Hell** | Eastern Jungle: dense canopy, muddy shores | Sink six gunboats patrolling the coast. Two of them fire anti-air missiles. |
+| 5 | **Operation Black Gold** | Volcanic Oil Fields: ash, rust-red ridges, dead trees | A shield protects the command bunker. Destroy its three generators to drop the shield, then destroy the bunker. |
+| 6 | **Operation Red Talon** | Red Canyons: red rock and cacti | Hunt down RED TALON, a stolen prototype gunship, and destroy it. |
+
+After the sixth mission the campaign starts over with tougher enemies.
+
+Theatres are defined in `THEATRES` in `src/terrain.js`, and missions in `src/missions.js`.

@@ -10,7 +10,7 @@ function shade(hex, amt) {
   const n = parseInt(hex.slice(1), 16);
   const t = amt < 0 ? 0 : 255, p = Math.abs(amt);
   const ch = (v) => Math.round(v + (t - v) * p);
-  return `rgb(${ch(n >> 16)},${ch((n >> 8) & 255)},${ch(n & 255)})`;
+  return '#' + ((1 << 24) | (ch(n >> 16) << 16) | (ch((n >> 8) & 255) << 8) | ch(n & 255)).toString(16).slice(1);
 }
 
 // Gradient for a sprite part, lit from the world light whichever way the sprite faces.
@@ -1201,13 +1201,13 @@ class Jeep extends Enemy {
     ctx.beginPath();
     ctx.arc(-14, 0, 3.2, 0, TAU);
     ctx.fill();
-    ctx.fillStyle = litFill(ctx, this.angle, 8, '#8f8455', f);
+    ctx.fillStyle = litFill(ctx, this.angle, 8, THEATRE.camo.light, f);
     ctx.beginPath();
     ctx.roundRect(-13, -7, 27, 14, 3);
     ctx.fill();
     outlinePath(ctx);
     // Bonnet, grille and windscreen.
-    ctx.fillStyle = litFill(ctx, this.angle, 6, '#a3976a', f);
+    ctx.fillStyle = litFill(ctx, this.angle, 6, shade(THEATRE.camo.light, 0.12), f);
     ctx.beginPath();
     ctx.roundRect(5, -6, 8.5, 12, 2);
     ctx.fill();
@@ -1220,7 +1220,7 @@ class Jeep extends Enemy {
     ctx.fillStyle = glassFill(ctx, this.angle, 6, '#2e3a40');
     ctx.fillRect(2, -6, 2.5, 12);
     // Open rear bed with a roll bar.
-    ctx.fillStyle = f ? '#fff' : '#5f5838';
+    ctx.fillStyle = f ? '#fff' : shade(THEATRE.camo.light, -0.35);
     ctx.beginPath();
     ctx.roundRect(-12, -5.5, 11, 11, 1.5);
     ctx.fill();
@@ -1232,7 +1232,7 @@ class Jeep extends Enemy {
     ctx.fillStyle = '#222';
     ctx.fillRect(1, -0.8, 13, 1.6);
     ctx.fillRect(2, -1.8, 4, 3.6);
-    ctx.fillStyle = f ? '#fff' : '#3d4a2c';
+    ctx.fillStyle = f ? '#fff' : THEATRE.camo.dark;
     ctx.beginPath();
     ctx.arc(-1, 0, 3, 0, TAU);
     ctx.fill();
@@ -1301,7 +1301,7 @@ class Truck extends Enemy {
       drawWheel(ctx, wx, 7.5, 7, 3);
     }
     // Cab with windscreen and roof hatch.
-    ctx.fillStyle = litFill(ctx, this.angle, 9, '#4d5634', f);
+    ctx.fillStyle = litFill(ctx, this.angle, 9, shade(THEATRE.camo.main, -0.12), f);
     ctx.beginPath();
     ctx.roundRect(11, -8, 13, 16, 2.5);
     ctx.fill();
@@ -1313,7 +1313,7 @@ class Truck extends Enemy {
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.fillRect(13.5, -2.5, 4, 5);
     // Canvas-covered cargo bed, sagging between its hoops.
-    ctx.fillStyle = litFill(ctx, this.angle, 10, '#6b6a45', f);
+    ctx.fillStyle = litFill(ctx, this.angle, 10, THEATRE.camo.cover, f);
     ctx.beginPath();
     ctx.roundRect(-22, -9, 32, 18, 2.5);
     ctx.fill();
@@ -1397,7 +1397,7 @@ class Tank extends Enemy {
       }
     }
     // Hull with a sloped glacis and engine deck grilles.
-    ctx.fillStyle = litFill(ctx, this.angle, 12, '#5b6340', f);
+    ctx.fillStyle = litFill(ctx, this.angle, 12, THEATRE.camo.main, f);
     ctx.beginPath();
     ctx.moveTo(-19, -10); ctx.lineTo(16, -10); ctx.lineTo(21, -6);
     ctx.lineTo(21, 6); ctx.lineTo(16, 10); ctx.lineTo(-19, 10);
@@ -1414,17 +1414,17 @@ class Tank extends Enemy {
     ctx.stroke();
     // Turret, barrel with muzzle brake, and the commander's hatch.
     ctx.rotate(this.turret - this.angle);
-    ctx.fillStyle = litFill(ctx, this.turret, 3, '#4a5233', f);
+    ctx.fillStyle = litFill(ctx, this.turret, 3, shade(THEATRE.camo.main, -0.15), f);
     ctx.fillRect(6, -2, 23, 4);
     ctx.fillRect(28, -3, 4, 6);
-    ctx.fillStyle = litFill(ctx, this.turret, 10, '#4f5737', f);
+    ctx.fillStyle = litFill(ctx, this.turret, 10, shade(THEATRE.camo.main, -0.08), f);
     ctx.beginPath();
     ctx.moveTo(-12, -7); ctx.lineTo(-6, -10); ctx.lineTo(5, -9); ctx.lineTo(10, -4);
     ctx.lineTo(10, 4); ctx.lineTo(5, 9); ctx.lineTo(-6, 10); ctx.lineTo(-12, 7);
     ctx.closePath();
     ctx.fill();
     outlinePath(ctx);
-    ctx.fillStyle = f ? '#fff' : '#3c4329';
+    ctx.fillStyle = f ? '#fff' : THEATRE.camo.dark;
     ctx.beginPath();
     ctx.arc(-4, -3.5, 3.2, 0, TAU);
     ctx.fill();
@@ -1483,7 +1483,7 @@ class SamSite extends Enemy {
     ctx.arc(4, 5, 28, 0, TAU);
     ctx.fill();
     // Gravel pad inside a ring of sandbags.
-    ctx.fillStyle = litFill(ctx, 0, 26, '#8b7b57', f);
+    ctx.fillStyle = litFill(ctx, 0, 26, THEATRE.camo.ground, f);
     ctx.beginPath();
     ctx.arc(0, 0, 26, 0, TAU);
     ctx.fill();
@@ -1492,7 +1492,7 @@ class SamSite extends Enemy {
       ctx.save();
       ctx.translate(Math.cos(a) * 22.5, Math.sin(a) * 22.5);
       ctx.rotate(a + Math.PI / 2);
-      ctx.fillStyle = litFill(ctx, a + Math.PI / 2, 4, i % 2 ? '#7a6c4b' : '#857552', f);
+      ctx.fillStyle = litFill(ctx, a + Math.PI / 2, 4, shade(THEATRE.camo.ground, i % 2 ? -0.14 : -0.06), f);
       ctx.beginPath();
       ctx.ellipse(0, 0, 5.4, 3.4, 0, 0, TAU);
       ctx.fill();
@@ -1501,13 +1501,13 @@ class SamSite extends Enemy {
     }
     // Ammo crates.
     for (const [cx, cy] of [[11, 9], [6, 13]]) {
-      ctx.fillStyle = litFill(ctx, 0, 3, '#4d5634', f);
+      ctx.fillStyle = litFill(ctx, 0, 3, THEATRE.camo.main, f);
       ctx.fillRect(cx - 2.5, cy - 2, 5, 4);
       ctx.strokeStyle = 'rgba(0,0,0,0.4)';
       ctx.lineWidth = 0.6;
       ctx.strokeRect(cx - 2.5, cy - 2, 5, 4);
     }
-    ctx.fillStyle = litFill(ctx, 0, 12, '#5a5b4c', f);
+    ctx.fillStyle = litFill(ctx, 0, 12, shade(THEATRE.camo.dark, 0.25), f);
     ctx.beginPath();
     ctx.arc(0, 0, 12, 0, TAU);
     ctx.fill();
@@ -1532,7 +1532,7 @@ class SamSite extends Enemy {
     ctx.restore();
     // Twin-rail launcher that tracks the player.
     ctx.rotate(this.turret);
-    ctx.fillStyle = litFill(ctx, this.turret, 9, '#3f4535', f);
+    ctx.fillStyle = litFill(ctx, this.turret, 9, shade(THEATRE.camo.main, -0.3), f);
     ctx.beginPath();
     ctx.roundRect(-8, -9, 16, 18, 2);
     ctx.fill();
@@ -1574,7 +1574,7 @@ class Gunship extends Enemy {
     this.rotor = rand(0, TAU);
     this.hx = x; this.hy = y;
     this.rate = diff;
-    this.colors = { body: '#4a5638', dark: '#363f29', accent: '#9aa67a', glass: '#2a3b3a' };
+    this.colors = { ...THEATRE.camo.heli, glass: '#2a3b3a' };
     this.scale = 0.9;
   }
   update(dt, g) {
@@ -1719,6 +1719,531 @@ class Jet extends Enemy {
     drawJetShape(ctx, this.x + 40, this.y + 52, this.angle, { shadow: true, scale: 0.9 });
   }
   draw(ctx) {
-    drawJetShape(ctx, this.x, this.y, this.angle, { body: '#7d8a93', flash: this.hitFlash > 0 });
+    drawJetShape(ctx, this.x, this.y, this.angle, { body: THEATRE.camo.jet, flash: this.hitFlash > 0 });
+  }
+}
+
+// ---------------------------------------------------------------- emplacements, boats and structures
+
+function isWater(x, y) {
+  return x > 60 && y > 60 && x < WORLD_W - 60 && y < WORLD_H - 60 && heightAt(x, y) < SEA_LEVEL - 0.01;
+}
+
+// Ring of sandbags around an emplacement.
+function drawSandbags(ctx, n, radius, f) {
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * TAU;
+    ctx.save();
+    ctx.translate(Math.cos(a) * radius, Math.sin(a) * radius);
+    ctx.rotate(a + Math.PI / 2);
+    ctx.fillStyle = litFill(ctx, a + Math.PI / 2, 4, shade(THEATRE.camo.ground, i % 2 ? -0.14 : -0.06), f);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 4.6, 3, 0, 0, TAU);
+    ctx.fill();
+    outlinePath(ctx);
+    ctx.restore();
+  }
+}
+
+// Twin-barrelled anti-aircraft gun: static, hoses the sky with fast bursts.
+class AAGun extends Enemy {
+  constructor(x, y, diff) {
+    super(x, y);
+    this.r = 15;
+    this.hp = this.maxHp = 35 * diff;
+    this.score = 200;
+    this.boom = 26;
+    this.turret = rand(0, TAU);
+    this.rate = diff;
+    this.side = 1;
+  }
+  update(dt, g) {
+    const p = g.player;
+    const t = this.toPlayer(g);
+    this.hitFlash -= dt;
+    const inRange = t.d < 640 && !p.dead;
+    if (inRange) this.turret = turnToward(this.turret, t.a, 2.6 * dt);
+    this.cd -= dt;
+    this.burstT -= dt;
+    if (inRange && this.cd <= 0 && Math.abs(angDiff(this.turret, t.a)) < 0.2) {
+      this.burst = 6;
+      this.cd = rand(2, 3) / Math.sqrt(this.rate);
+    }
+    if (this.burst > 0 && this.burstT <= 0) {
+      this.burst--;
+      this.burstT = 0.07;
+      this.side *= -1;
+      const ox = this.x - Math.sin(this.turret) * 3 * this.side, oy = this.y + Math.cos(this.turret) * 3 * this.side;
+      g.enemyShoot(ox, oy, this.turret, 600, 3, 'bullet', 0.07, 18);
+    }
+  }
+  draw(ctx) {
+    const f = this.hitFlash > 0, C = THEATRE.camo;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.arc(3, 4, 18, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = litFill(ctx, 0, 14, shade(C.ground, -0.25), f);
+    ctx.beginPath();
+    ctx.arc(0, 0, 14, 0, TAU);
+    ctx.fill();
+    drawSandbags(ctx, 11, 14.5, f);
+    ctx.rotate(this.turret);
+    ctx.fillStyle = '#25272a';
+    ctx.fillRect(4, -4, 16, 2);
+    ctx.fillRect(4, 2, 16, 2);
+    ctx.fillRect(18, -4.6, 3, 3.2);
+    ctx.fillRect(18, 1.4, 3, 3.2);
+    ctx.fillStyle = litFill(ctx, this.turret, 8, C.main, f);
+    ctx.beginPath();
+    ctx.roundRect(-7, -7, 13, 14, 3);
+    ctx.fill();
+    outlinePath(ctx);
+    ctx.fillStyle = f ? '#fff' : C.dark;
+    ctx.beginPath();
+    ctx.arc(-2, 0, 3, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+    this.drawHealth(ctx);
+  }
+}
+
+// Fuel depot: three storage tanks on a bunded pad. Goes up in a fireball that hurts anything nearby.
+class FuelDepot extends Enemy {
+  constructor(x, y, diff) {
+    super(x, y);
+    this.r = 28;
+    this.hp = this.maxHp = 70 * diff;
+    this.score = 400;
+    this.boom = 64;
+    this.objective = true;
+  }
+  update(dt) {
+    this.hitFlash -= dt;
+  }
+  die(g) {
+    super.die(g);
+    for (const o of g.enemies) {
+      if (o !== this && !o.dead && dist2(o.x, o.y, this.x, this.y) < 170 * 170) o.hurt(45, g);
+    }
+    const p = g.player;
+    if (!p.dead && dist2(p.x, p.y, this.x, this.y) < 110 * 110) p.damage(12, g);
+    g.emitters.push({ x: this.x + 10, y: this.y - 6, life: 14 });
+  }
+  draw(ctx) {
+    const f = this.hitFlash > 0, C = THEATRE.camo;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.roundRect(-28, -22, 62, 50, 5);
+    ctx.fill();
+    // Concrete pad with a raised bund wall.
+    ctx.fillStyle = litFill(ctx, this.angle, 30, '#85867f', f);
+    ctx.beginPath();
+    ctx.roundRect(-31, -26, 62, 52, 5);
+    ctx.fill();
+    outlinePath(ctx);
+    ctx.fillStyle = f ? '#fff' : '#6b6c66';
+    ctx.beginPath();
+    ctx.roundRect(-27, -22, 54, 44, 3);
+    ctx.fill();
+    // Pipework between the tanks.
+    ctx.strokeStyle = '#3b3d3f';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-13, -8); ctx.lineTo(13, -8); ctx.lineTo(0, 11); ctx.closePath();
+    ctx.moveTo(13, -8); ctx.lineTo(27, -8);
+    ctx.stroke();
+    const tanks = [[-13, -8, 10.5], [13, -8, 10.5], [0, 11, 9.5]];
+    for (const [tx, ty, tr] of tanks) {
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.arc(tx + 2, ty + 3, tr, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = litFill(ctx, this.angle, tr, shade(C.light, 0.3), f);
+      ctx.beginPath();
+      ctx.arc(tx, ty, tr, 0, TAU);
+      ctx.fill();
+      outlinePath(ctx);
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.arc(tx, ty, tr * 0.65, 0, TAU);
+      ctx.stroke();
+      ctx.fillStyle = '#3b3d3f';
+      ctx.beginPath();
+      ctx.arc(tx, ty, 1.8, 0, TAU);
+      ctx.fill();
+    }
+    // Hazard diamond on the wall.
+    ctx.translate(22, 16);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = '#e8b31c';
+    ctx.fillRect(-3, -3, 6, 6);
+    ctx.fillStyle = '#c0392b';
+    ctx.fillRect(-1.5, -1.5, 3, 3);
+    ctx.restore();
+    this.drawHealth(ctx);
+  }
+}
+
+// Fast attack boat: patrols the water, strafes with a bow gun; some carry missiles.
+class PatrolBoat extends Enemy {
+  constructor(x, y, diff, missiles = false) {
+    super(x, y);
+    this.r = 16;
+    this.hp = this.maxHp = 40 * diff;
+    this.score = 350;
+    this.boom = 30;
+    this.speed = 150;
+    this.missileBoat = missiles;
+    this.turret = this.angle;
+    this.rate = diff;
+    this.wander = this.angle;
+    this.wanderT = 0;
+    this.dir = Math.random() < 0.5 ? 1 : -1;
+    this.salvoCd = rand(4, 8);
+    this.wake = 0;
+  }
+  update(dt, g) {
+    const p = g.player;
+    const t = this.toPlayer(g);
+    this.hitFlash -= dt;
+    let ta, speed = this.speed;
+    if (t.d < 900 && !p.dead) {
+      this.aware = true;
+      ta = t.d > 360 ? t.a : t.a + (Math.PI / 2) * this.dir;
+    } else {
+      this.wanderT -= dt;
+      if (this.wanderT <= 0) {
+        this.wanderT = rand(3, 6);
+        this.wander = rand(0, TAU);
+      }
+      ta = this.wander;
+      speed *= 0.55;
+    }
+    this.angle = turnToward(this.angle, ta, 1.6 * dt);
+    const nx = this.x + Math.cos(this.angle) * speed * dt, ny = this.y + Math.sin(this.angle) * speed * dt;
+    if (isWater(nx, ny)) {
+      this.x = nx;
+      this.y = ny;
+      this.wake = Math.min(1, this.wake + dt * 2);
+    } else {
+      // Heading for the shore: swing round until there is open water ahead.
+      this.angle += this.dir * 3 * dt;
+      this.wander = this.angle;
+      this.wanderT = rand(1, 2);
+      this.wake = Math.max(0.2, this.wake - dt * 2);
+    }
+
+    this.turret = turnToward(this.turret, t.a, 3.5 * dt);
+    this.cd -= dt;
+    this.burstT -= dt;
+    if (t.d < 520 && !p.dead && this.cd <= 0 && Math.abs(angDiff(this.turret, t.a)) < 0.2) {
+      this.burst = 4;
+      this.cd = rand(1.6, 2.4) / Math.sqrt(this.rate);
+    }
+    if (this.burst > 0 && this.burstT <= 0) {
+      this.burst--;
+      this.burstT = 0.1;
+      const bx = this.x + Math.cos(this.angle) * 10, by = this.y + Math.sin(this.angle) * 10;
+      g.enemyShoot(bx, by, this.turret, 460, 4, 'bullet', 0.07, 10);
+    }
+    if (this.missileBoat) {
+      this.salvoCd -= dt;
+      if (t.d < 850 && !p.dead && this.salvoCd <= 0) {
+        this.salvoCd = rand(7, 10) / Math.sqrt(this.rate);
+        g.launchEnemyMissile(this.x, this.y, this.angle, p);
+      }
+    }
+  }
+  // Sinks without leaving a wreck on the water.
+  die(g) {
+    g.explode(this.x, this.y, this.boom);
+    g.addScore(this.score, this.x, this.y);
+    g.kills++;
+    g.maybeDrop(this.x, this.y);
+  }
+  draw(ctx) {
+    const f = this.hitFlash > 0, C = THEATRE.camo;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    // Wake: a white V spreading from the stern.
+    if (this.wake > 0.05) {
+      ctx.strokeStyle = `rgba(235,245,250,${0.45 * this.wake})`;
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-14, -5); ctx.lineTo(-48, -17);
+      ctx.moveTo(-14, 5); ctx.lineTo(-48, 17);
+      ctx.stroke();
+      ctx.fillStyle = `rgba(235,245,250,${0.3 * this.wake})`;
+      ctx.beginPath();
+      ctx.ellipse(-22, 0, 10, 4.5, 0, 0, TAU);
+      ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(3, 4, 21, 8, 0, 0, TAU);
+    ctx.fill();
+    // Hull and deck.
+    ctx.fillStyle = litFill(ctx, this.angle, 8, C.cover, f);
+    ctx.beginPath();
+    ctx.moveTo(21, 0);
+    ctx.quadraticCurveTo(13, -7.5, 4, -7.5);
+    ctx.lineTo(-16, -6.5); ctx.lineTo(-16, 6.5); ctx.lineTo(4, 7.5);
+    ctx.quadraticCurveTo(13, 7.5, 21, 0);
+    ctx.fill();
+    outlinePath(ctx);
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(18, 0); ctx.lineTo(-15, 0);
+    ctx.stroke();
+    // Wheelhouse with windows.
+    ctx.fillStyle = litFill(ctx, this.angle, 5, C.main, f);
+    ctx.beginPath();
+    ctx.roundRect(-7, -4.5, 10, 9, 2);
+    ctx.fill();
+    outlinePath(ctx);
+    ctx.fillStyle = glassFill(ctx, this.angle, 4, '#26323a');
+    ctx.fillRect(1.5, -3.5, 1.6, 7);
+    // Stern missile box.
+    if (this.missileBoat) {
+      ctx.fillStyle = f ? '#fff' : C.dark;
+      ctx.fillRect(-15, -4, 6, 8);
+      ctx.fillStyle = '#b83020';
+      ctx.fillRect(-9.5, -3, 1.2, 2);
+      ctx.fillRect(-9.5, 1, 1.2, 2);
+    }
+    // Bow gun.
+    ctx.translate(11, 0);
+    ctx.rotate(this.turret - this.angle);
+    ctx.fillStyle = '#222';
+    ctx.fillRect(0, -0.8, 10, 1.6);
+    ctx.fillStyle = f ? '#fff' : C.dark;
+    ctx.beginPath();
+    ctx.arc(0, 0, 3, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+    this.drawHealth(ctx);
+  }
+}
+
+// Power generator feeding the command bunker's shield.
+class Generator extends Enemy {
+  constructor(x, y, diff) {
+    super(x, y);
+    this.r = 22;
+    this.hp = this.maxHp = 80 * diff;
+    this.score = 400;
+    this.boom = 44;
+    this.objective = true;
+    this.fan = 0;
+  }
+  update(dt) {
+    this.hitFlash -= dt;
+    this.fan += dt * 14;
+  }
+  draw(ctx) {
+    const f = this.hitFlash > 0;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.roundRect(-22, -15, 50, 38, 4);
+    ctx.fill();
+    ctx.fillStyle = litFill(ctx, this.angle, 24, '#7d7e78', f);
+    ctx.beginPath();
+    ctx.roundRect(-25, -19, 50, 38, 4);
+    ctx.fill();
+    outlinePath(ctx);
+    // Housing with radiator fins.
+    ctx.fillStyle = litFill(ctx, this.angle, 12, '#b8892a', f);
+    ctx.beginPath();
+    ctx.roundRect(-20, -13, 24, 26, 3);
+    ctx.fill();
+    outlinePath(ctx);
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    for (let i = -16; i <= 0; i += 4) {
+      ctx.moveTo(i, -10); ctx.lineTo(i, 10);
+    }
+    ctx.stroke();
+    // Cooling fan.
+    ctx.fillStyle = '#26282a';
+    ctx.beginPath();
+    ctx.arc(14, 0, 8, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = '#8a8f96';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let b = 0; b < 3; b++) {
+      const a = this.fan + (b * TAU) / 3;
+      ctx.moveTo(14, 0);
+      ctx.lineTo(14 + Math.cos(a) * 6.5, Math.sin(a) * 6.5);
+    }
+    ctx.stroke();
+    // Power arcing off the coil.
+    const pulse = 0.4 + 0.4 * Math.sin(this.fan * 0.9);
+    const gl = ctx.createRadialGradient(-8, 0, 0, -8, 0, 14);
+    gl.addColorStop(0, `rgba(140,210,255,${pulse})`);
+    gl.addColorStop(1, 'rgba(80,160,255,0)');
+    ctx.fillStyle = gl;
+    ctx.beginPath();
+    ctx.arc(-8, 0, 14, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+    this.drawHealth(ctx);
+  }
+}
+
+// Fortified command bunker. Invulnerable behind its shield while any generator is running.
+class Bunker extends Enemy {
+  constructor(x, y, diff) {
+    super(x, y);
+    this.r = 34;
+    this.hp = this.maxHp = 320 * diff;
+    this.score = 2500;
+    this.boom = 84;
+    this.objective = true;
+    this.turret = rand(0, TAU);
+    this.rate = diff;
+    this.shielded = true;
+    this.shieldHit = 0;
+    this.salvoCd = 5;
+    this.angle = 0;
+  }
+  hurt(n, g) {
+    if (this.shielded) {
+      this.shieldHit = 0.2;
+      return;
+    }
+    super.hurt(n, g);
+  }
+  update(dt, g) {
+    const p = g.player;
+    const t = this.toPlayer(g);
+    this.hitFlash -= dt;
+    this.shieldHit -= dt;
+    const shielded = g.enemies.some((e) => e instanceof Generator && !e.dead);
+    if (this.shielded && !shielded) {
+      g.banner('BUNKER SHIELD DOWN', HUD_AMBER);
+      g.shake(6);
+    }
+    this.shielded = shielded;
+    // While the shield is up, the dome is what incoming fire hits.
+    this.r = shielded ? 58 : 34;
+
+    const inRange = t.d < 720 && !p.dead;
+    if (inRange) this.turret = turnToward(this.turret, t.a, 2 * dt);
+    this.cd -= dt;
+    this.burstT -= dt;
+    if (inRange && this.cd <= 0 && Math.abs(angDiff(this.turret, t.a)) < 0.25) {
+      this.burst = 8;
+      this.cd = rand(1.6, 2.4) / Math.sqrt(this.rate);
+    }
+    if (this.burst > 0 && this.burstT <= 0) {
+      this.burst--;
+      this.burstT = 0.06;
+      g.enemyShoot(this.x, this.y, this.turret, 620, 4, 'bullet', 0.08, 24);
+    }
+    this.salvoCd -= dt;
+    if (t.d < 880 && !p.dead && this.salvoCd <= 0) {
+      this.salvoCd = rand(6, 8) / Math.sqrt(this.rate);
+      g.launchEnemyMissile(this.x, this.y, t.a + 0.5, p);
+      g.launchEnemyMissile(this.x, this.y, t.a - 0.5, p);
+    }
+  }
+  draw(ctx) {
+    const f = this.hitFlash > 0, C = THEATRE.camo;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    const oct = (r) => {
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = Math.PI / 8 + (i * TAU) / 8;
+        if (i) ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+        else ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      ctx.closePath();
+    };
+    ctx.save();
+    ctx.translate(5, 6);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    oct(36);
+    ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = litFill(ctx, 0, 36, '#77746e', f);
+    oct(36);
+    ctx.fill();
+    outlinePath(ctx);
+    ctx.fillStyle = litFill(ctx, 0, 26, shade(C.main, -0.1), f);
+    oct(26);
+    ctx.fill();
+    outlinePath(ctx);
+    // Firing slits and roof vents.
+    ctx.fillStyle = '#141516';
+    for (let i = 0; i < 4; i++) {
+      const a = (i * TAU) / 4;
+      ctx.save();
+      ctx.rotate(a);
+      ctx.fillRect(29, -5, 4, 10);
+      ctx.restore();
+    }
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(-18, -20, 8, 5);
+    ctx.fillRect(10, 15, 8, 5);
+    // Radio mast.
+    ctx.strokeStyle = '#2a2c2e';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-14, 14); ctx.lineTo(-24, 24);
+    ctx.stroke();
+    ctx.fillStyle = Math.floor(performance.now() / 500) % 2 ? '#ff4030' : '#601810';
+    ctx.beginPath();
+    ctx.arc(-24, 24, 2, 0, TAU);
+    ctx.fill();
+    // Quad flak turret.
+    ctx.save();
+    ctx.rotate(this.turret);
+    ctx.fillStyle = '#25272a';
+    for (const by of [-6, -2, 2, 6]) ctx.fillRect(6, by - 0.9, 20, 1.8);
+    ctx.fillStyle = litFill(ctx, this.turret, 10, C.dark, f);
+    ctx.beginPath();
+    ctx.arc(0, 0, 11, 0, TAU);
+    ctx.fill();
+    outlinePath(ctx);
+    ctx.restore();
+
+    if (this.shielded) {
+      const t = performance.now() / 1000;
+      const hit = this.shieldHit > 0 ? 1 : 0;
+      const dome = ctx.createRadialGradient(-12, -12, 10, 0, 0, 58);
+      dome.addColorStop(0, `rgba(160,220,255,${0.06 + hit * 0.1})`);
+      dome.addColorStop(0.85, `rgba(90,170,255,${0.16 + hit * 0.2})`);
+      dome.addColorStop(1, `rgba(150,210,255,${0.5 + hit * 0.3})`);
+      ctx.fillStyle = dome;
+      ctx.beginPath();
+      ctx.arc(0, 0, 58, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(170,225,255,${0.35 + 0.25 * Math.sin(t * 4)})`;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 8]);
+      ctx.lineDashOffset = -t * 30;
+      ctx.beginPath();
+      ctx.arc(0, 0, 52, 0, TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+    this.drawHealth(ctx);
   }
 }

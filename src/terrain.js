@@ -7,6 +7,99 @@ const SHORE = 0.43;
 const HILLS = 0.71;
 const PEAKS = 0.82;
 
+// Each mission is fought in a theatre: its own island (map seed), palette, vegetation,
+// and the camouflage the enemy paints its vehicles in.
+// dryness shifts how much of the land is dry ground versus lush ground.
+// trees: kind of vegetation, how dense, and a bias toward planting it in drier ground.
+const THEATRES = {
+  temperate: {
+    label: 'CENTRAL VALLEYS',
+    seed: 1984,
+    seaShallow: [52, 122, 146], seaDeep: [12, 38, 74],
+    shore: [214, 197, 148], dry: [202, 170, 108], wet: [88, 118, 56],
+    rock: [124, 107, 86], peak: [158, 150, 142], dryness: 0,
+    trees: { kind: 'broadleaf', density: 2.6, bias: 0 },
+    scrub: [110, 100, 60], boulder: [120, 110, 96],
+    camo: {
+      light: '#8f8455', main: '#5b6340', dark: '#3c4329', cover: '#6b6a45', ground: '#8b7b57', jet: '#7d8a93',
+      heli: { body: '#4a5638', dark: '#363f29', accent: '#9aa67a' },
+    },
+  },
+  desert: {
+    label: 'SOUTHERN DESERT',
+    seed: 7,
+    seaShallow: [64, 150, 160], seaDeep: [14, 56, 92],
+    shore: [228, 210, 160], dry: [222, 192, 134], wet: [168, 158, 96],
+    rock: [184, 132, 92], peak: [204, 170, 130], dryness: 0.16,
+    trees: { kind: 'palm', density: 3, bias: -0.08 },
+    scrub: [140, 120, 70], boulder: [176, 140, 100],
+    camo: {
+      light: '#c2a873', main: '#a88d5c', dark: '#6b5a3a', cover: '#b89f70', ground: '#c9b07a', jet: '#b8a888',
+      heli: { body: '#9c8559', dark: '#6b5a3a', accent: '#e6d4a6' },
+    },
+  },
+  arctic: {
+    label: 'NORTHERN TUNDRA',
+    seed: 4242,
+    seaShallow: [96, 150, 178], seaDeep: [18, 48, 80], ice: true,
+    shore: [226, 234, 240], dry: [236, 240, 245], wet: [192, 204, 202],
+    rock: [152, 160, 168], peak: [250, 252, 255], dryness: -0.04,
+    trees: { kind: 'snowpine', density: 2.4, bias: 0 },
+    scrub: [170, 180, 176], boulder: [140, 146, 152],
+    camo: {
+      light: '#d9dde0', main: '#aeb5ba', dark: '#4f585f', cover: '#c9ced2', ground: '#e4e8ec', jet: '#c8d0d6',
+      heli: { body: '#d4d9dd', dark: '#58626a', accent: '#c0392b' },
+    },
+  },
+  jungle: {
+    label: 'EASTERN JUNGLE',
+    seed: 31337,
+    seaShallow: [48, 116, 104], seaDeep: [10, 44, 52],
+    shore: [126, 108, 72], dry: [104, 128, 58], wet: [44, 90, 38],
+    rock: [96, 92, 70], peak: [120, 118, 96], dryness: -0.2,
+    trees: { kind: 'jungle', density: 3.4, bias: 0.25 },
+    scrub: [60, 90, 40], boulder: [100, 96, 80],
+    camo: {
+      light: '#5e6b3c', main: '#3d4a2a', dark: '#222b18', cover: '#4d5a33', ground: '#6b5a3c', jet: '#4f5e48',
+      heli: { body: '#2f3d26', dark: '#1d2617', accent: '#8a9a52' },
+    },
+  },
+  ash: {
+    label: 'VOLCANIC OIL FIELDS',
+    seed: 666,
+    seaShallow: [52, 60, 66], seaDeep: [14, 16, 22],
+    shore: [80, 74, 70], dry: [98, 90, 84], wet: [76, 78, 64],
+    rock: [112, 76, 60], peak: [70, 62, 58], dryness: 0.1,
+    trees: { kind: 'dead', density: 1.4, bias: 0 },
+    scrub: [90, 86, 70], boulder: [70, 64, 60],
+    camo: {
+      light: '#77706a', main: '#55504b', dark: '#2b2826', cover: '#635d57', ground: '#6e6660', jet: '#5d6066',
+      heli: { body: '#3b3734', dark: '#201d1b', accent: '#d0582e' },
+    },
+  },
+  canyon: {
+    label: 'RED CANYONS',
+    seed: 2077,
+    seaShallow: [70, 140, 150], seaDeep: [16, 54, 84],
+    shore: [214, 170, 120], dry: [196, 132, 84], wet: [150, 122, 72],
+    rock: [166, 90, 60], peak: [190, 120, 86], dryness: 0.12,
+    trees: { kind: 'cactus', density: 1.6, bias: 0.08 },
+    scrub: [120, 110, 60], boulder: [150, 84, 56],
+    camo: {
+      light: '#b0805a', main: '#8a6446', dark: '#4e3424', cover: '#9c7656', ground: '#b98a62', jet: '#a88f7c',
+      heli: { body: '#7a5238', dark: '#4a2f20', accent: '#e0b07a' },
+    },
+  },
+};
+
+let THEATRE = THEATRES.temperate;
+
+// Switch the world to a theatre. The terrain cache must be reset afterwards.
+function setTheatre(name) {
+  THEATRE = THEATRES[name];
+  Noise.seed(THEATRE.seed);
+}
+
 const CHUNK = 256; // world px per cached chunk
 const TEXEL = 2; // world px per terrain colour sample
 const MAX_CHUNKS = 140;
@@ -32,30 +125,139 @@ function isLand(x, y) {
 }
 
 function terrainColor(h, m, out) {
+  const T = THEATRE;
   let r, g, b;
   if (h < SEA_LEVEL) {
     const t = clamp((SEA_LEVEL - h) / 0.22, 0, 1);
-    r = lerp(52, 12, t);
-    g = lerp(122, 38, t);
-    b = lerp(146, 74, t);
+    r = lerp(T.seaShallow[0], T.seaDeep[0], t);
+    g = lerp(T.seaShallow[1], T.seaDeep[1], t);
+    b = lerp(T.seaShallow[2], T.seaDeep[2], t);
+    if (T.ice && h > SEA_LEVEL - 0.035) {
+      // pack ice along the coast
+      r = 204; g = 222; b = 232;
+    }
   } else if (h < SHORE) {
-    r = 214; g = 197; b = 148;
+    [r, g, b] = T.shore;
   } else {
-    const wet = clamp((m - 0.44) * 4.5, 0, 1);
+    const wet = clamp((m - 0.44 - T.dryness) * 4.5, 0, 1);
     const t = clamp((h - SHORE) / (HILLS - SHORE), 0, 1);
-    r = lerp(202, 88, wet) * (1 - t * 0.12);
-    g = lerp(170, 118, wet) * (1 - t * 0.12);
-    b = lerp(108, 56, wet) * (1 - t * 0.12);
+    r = lerp(T.dry[0], T.wet[0], wet) * (1 - t * 0.12);
+    g = lerp(T.dry[1], T.wet[1], wet) * (1 - t * 0.12);
+    b = lerp(T.dry[2], T.wet[2], wet) * (1 - t * 0.12);
     if (h > HILLS - 0.03) {
       // blend into rock
       const k = clamp((h - (HILLS - 0.03)) / 0.06, 0, 1);
-      const rr = h > PEAKS ? 158 : 124, rg = h > PEAKS ? 150 : 107, rb = h > PEAKS ? 142 : 86;
-      r = lerp(r, rr, k);
-      g = lerp(g, rg, k);
-      b = lerp(b, rb, k);
+      const rc = h > PEAKS ? T.peak : T.rock;
+      r = lerp(r, rc[0], k);
+      g = lerp(g, rc[1], k);
+      b = lerp(b, rc[2], k);
     }
   }
   out[0] = r; out[1] = g; out[2] = b;
+}
+
+// Star outline used for conifers seen from above.
+function starPath(g, x, y, r, points, rot) {
+  g.beginPath();
+  for (let i = 0; i < points * 2; i++) {
+    const a = rot + (i * Math.PI) / points;
+    const rr = i % 2 ? r * 0.5 : r;
+    if (i) g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    else g.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  g.closePath();
+}
+
+// One tree (or cactus, or dead snag) seen from above, with its shadow down-right.
+function drawTree(g, kind, x, y, size, tint) {
+  if (kind === 'broadleaf' || kind === 'jungle') {
+    const big = kind === 'jungle';
+    const r = big ? 7 + size * 9 : 5 + size * 7;
+    g.fillStyle = 'rgba(0,0,0,0.25)';
+    g.beginPath();
+    g.arc(x + r * 0.5, y + r * 0.6, r, 0, TAU);
+    g.fill();
+    g.fillStyle = big
+      ? `rgb(${22 + tint * 24},${62 + tint * 46},${26 + tint * 16})`
+      : `rgb(${38 + tint * 20},${66 + tint * 24},${30 + tint * 10})`;
+    g.beginPath();
+    g.arc(x, y, r, 0, TAU);
+    g.fill();
+    g.fillStyle = big ? 'rgba(170,220,110,0.18)' : 'rgba(160,200,110,0.22)';
+    g.beginPath();
+    g.arc(x - r * 0.3, y - r * 0.3, r * 0.5, 0, TAU);
+    g.fill();
+  } else if (kind === 'pine' || kind === 'snowpine') {
+    const r = 5 + size * 6;
+    const rot = tint * TAU;
+    g.fillStyle = 'rgba(0,0,0,0.28)';
+    starPath(g, x + r * 0.5, y + r * 0.6, r, 8, rot);
+    g.fill();
+    g.fillStyle = `rgb(${26 + tint * 16},${54 + tint * 22},${38 + tint * 10})`;
+    starPath(g, x, y, r, 8, rot);
+    g.fill();
+    if (kind === 'snowpine') {
+      g.fillStyle = 'rgba(245,248,252,0.85)';
+      starPath(g, x - r * 0.12, y - r * 0.12, r * 0.62, 8, rot + 0.2);
+      g.fill();
+    } else {
+      g.fillStyle = 'rgba(140,190,120,0.3)';
+      g.beginPath();
+      g.arc(x - r * 0.15, y - r * 0.15, r * 0.3, 0, TAU);
+      g.fill();
+    }
+  } else if (kind === 'palm') {
+    const r = 7 + size * 6;
+    for (const [ox, oy, col] of [[r * 0.5, r * 0.6, 'rgba(0,0,0,0.25)'], [0, 0, `rgb(${70 + tint * 30},${118 + tint * 30},${48 + tint * 10})`]]) {
+      g.fillStyle = col;
+      for (let i = 0; i < 7; i++) {
+        const a = tint * TAU + (i * TAU) / 7;
+        g.beginPath();
+        g.ellipse(x + ox + Math.cos(a) * r * 0.5, y + oy + Math.sin(a) * r * 0.5, r * 0.55, r * 0.17, a, 0, TAU);
+        g.fill();
+      }
+    }
+    g.fillStyle = '#5a4630';
+    g.beginPath();
+    g.arc(x, y, 1.8, 0, TAU);
+    g.fill();
+  } else if (kind === 'dead') {
+    const r = 5 + size * 6;
+    g.lineCap = 'round';
+    for (const [ox, oy, col] of [[r * 0.4, r * 0.5, 'rgba(0,0,0,0.3)'], [0, 0, '#3e3732']]) {
+      g.strokeStyle = col;
+      g.lineWidth = 1.4;
+      g.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const a = tint * TAU + (i * TAU) / 5;
+        const ex = x + ox + Math.cos(a) * r, ey = y + oy + Math.sin(a) * r;
+        g.moveTo(x + ox, y + oy);
+        g.lineTo(ex, ey);
+        g.moveTo(x + ox + Math.cos(a) * r * 0.6, y + oy + Math.sin(a) * r * 0.6);
+        g.lineTo(ex + Math.cos(a + 0.9) * r * 0.35, ey + Math.sin(a + 0.9) * r * 0.35);
+      }
+      g.stroke();
+    }
+  } else if (kind === 'cactus') {
+    const r = 2.5 + size * 2.5;
+    const arms = [[0, 0, r], [r * 1.3, r * 0.2, r * 0.6], [-r * 1.2, -r * 0.3, r * 0.55]];
+    g.fillStyle = 'rgba(0,0,0,0.28)';
+    for (const [ox, oy, rr] of arms) {
+      g.beginPath();
+      g.arc(x + ox + r, y + oy + r * 1.2, rr, 0, TAU);
+      g.fill();
+    }
+    for (const [ox, oy, rr] of arms) {
+      g.fillStyle = `rgb(${66 + tint * 20},${104 + tint * 24},${60 + tint * 12})`;
+      g.beginPath();
+      g.arc(x + ox, y + oy, rr, 0, TAU);
+      g.fill();
+      g.fillStyle = 'rgba(200,230,170,0.3)';
+      g.beginPath();
+      g.arc(x + ox - rr * 0.3, y + oy - rr * 0.3, rr * 0.4, 0, TAU);
+      g.fill();
+    }
+  }
 }
 
 function distToSegment(px, py, ax, ay, bx, by) {
@@ -193,35 +395,25 @@ class Terrain {
       if (h < SHORE + 0.01) continue;
       if (this.roads.length && this.nearRoad(x, y, 22)) continue;
       const m = moistAt(x, y);
+      const T = THEATRE;
       if (h < HILLS) {
-        if (roll < (m - 0.4) * 2.6) {
-          const r = 5 + size * 7;
-          g.fillStyle = 'rgba(0,0,0,0.25)';
-          g.beginPath();
-          g.arc(x + r * 0.5, y + r * 0.6, r, 0, TAU);
-          g.fill();
-          g.fillStyle = `rgb(${38 + tint * 20},${66 + tint * 24},${30 + tint * 10})`;
-          g.beginPath();
-          g.arc(x, y, r, 0, TAU);
-          g.fill();
-          g.fillStyle = 'rgba(160,200,110,0.22)';
-          g.beginPath();
-          g.arc(x - r * 0.3, y - r * 0.3, r * 0.5, 0, TAU);
-          g.fill();
-        } else if (roll > 0.94 && m < 0.48) {
-          // desert scrub
-          g.fillStyle = 'rgba(110,100,60,0.7)';
+        if (roll < (m - 0.4 + T.trees.bias - T.dryness) * T.trees.density) {
+          drawTree(g, T.trees.kind, x, y, size, tint);
+        } else if (roll > 0.94 && m < 0.48 + T.dryness) {
+          // scrub
+          g.fillStyle = `rgba(${T.scrub.join(',')},0.7)`;
           g.beginPath();
           g.arc(x, y, 2 + size * 3, 0, TAU);
           g.fill();
         }
       } else if (roll < 0.16) {
         const r = 4 + size * 9;
+        const [br, bg, bb] = T.boulder;
         g.fillStyle = 'rgba(0,0,0,0.25)';
         g.beginPath();
         g.ellipse(x + 3, y + 3, r, r * 0.7, tint * 3, 0, TAU);
         g.fill();
-        g.fillStyle = `rgb(${120 + tint * 30},${110 + tint * 26},${96 + tint * 20})`;
+        g.fillStyle = `rgb(${br + tint * 30},${bg + tint * 26},${bb + tint * 20})`;
         g.beginPath();
         g.ellipse(x, y, r, r * 0.7, tint * 3, 0, TAU);
         g.fill();
@@ -269,7 +461,7 @@ class Terrain {
   // Draw the visible terrain. ctx must already be in world space.
   draw(ctx, vx0, vy0, vx1, vy1, budget) {
     this.frame++;
-    ctx.fillStyle = '#0c264a';
+    ctx.fillStyle = `rgb(${THEATRE.seaDeep.join(',')})`;
     ctx.fillRect(vx0, vy0, vx1 - vx0, vy1 - vy0);
     const maxC = Math.ceil(WORLD_W / CHUNK) - 1, maxR = Math.ceil(WORLD_H / CHUNK) - 1;
     const cx0 = Math.max(0, Math.floor(vx0 / CHUNK)), cx1 = Math.min(maxC, Math.floor(vx1 / CHUNK));
