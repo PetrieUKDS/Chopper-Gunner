@@ -61,6 +61,7 @@ const Input = {
   sticks: { move: null, aim: null },
   buttons: {},
   tapped: false,
+  tapX: 0, // screen x of the latest click or tap
   btnLayout: [],
 
   init(canvas) {
@@ -99,6 +100,7 @@ const Input = {
   onDown(e) {
     Sfx.init();
     this.tapped = true;
+    this.tapX = e.clientX;
     if (e.pointerType === 'touch') {
       e.preventDefault();
       this.touchMode = true;

@@ -210,9 +210,15 @@ function drawChopper(ctx, x, y, angle, rotor, o) {
     ctx.stroke();
   }
 
-  // Main rotor: a motion-blurred disc, trailing ghost blades, then the blades themselves.
   ctx.translate(2, 0);
-  const R = 38;
+  drawRotor(ctx, 38, 4, rotor, shadow);
+  ctx.restore();
+}
+
+// Main rotor around the current origin: a motion-blurred disc, trailing ghost blades,
+// then the blades themselves with painted tips.
+function drawRotor(ctx, R, blades, rotor, shadow) {
+  ctx.save();
   if (!shadow) {
     const disc = ctx.createRadialGradient(0, 0, 4, 0, 0, R);
     disc.addColorStop(0, 'rgba(180,190,200,0.03)');
@@ -230,8 +236,8 @@ function drawChopper(ctx, x, y, angle, rotor, o) {
     const a0 = rotor - k * 0.13;
     ctx.globalAlpha = 1 - k * 0.32;
     ctx.beginPath();
-    for (let b = 0; b < 4; b++) {
-      const a = a0 + (b * Math.PI) / 2;
+    for (let b = 0; b < blades; b++) {
+      const a = a0 + (b * TAU) / blades;
       ctx.moveTo(0, 0);
       ctx.lineTo(Math.cos(a) * R, Math.sin(a) * R);
     }
@@ -242,8 +248,8 @@ function drawChopper(ctx, x, y, angle, rotor, o) {
     // Painted blade tips.
     ctx.strokeStyle = 'rgba(230,200,70,0.85)';
     ctx.beginPath();
-    for (let b = 0; b < 4; b++) {
-      const a = rotor + (b * Math.PI) / 2;
+    for (let b = 0; b < blades; b++) {
+      const a = rotor + (b * TAU) / blades;
       ctx.moveTo(Math.cos(a) * R * 0.86, Math.sin(a) * R * 0.86);
       ctx.lineTo(Math.cos(a) * R, Math.sin(a) * R);
     }
@@ -257,6 +263,272 @@ function drawChopper(ctx, x, y, angle, rotor, o) {
     ctx.arc(-0.8, -0.8, 1.6, 0, TAU);
     ctx.fill();
   }
+  ctx.restore();
+}
+
+// Light scout helicopter: slim body, bubble canopy, skids and a shrouded tail rotor.
+function drawScout(ctx, x, y, angle, rotor, o) {
+  const s = o.scale || 1;
+  const shadow = !!o.shadow, f = !!o.flash;
+  const sil = 'rgba(0,0,0,0.22)';
+  const lit = (r, c) => (shadow ? sil : litFill(ctx, angle, r, c, f));
+  const outline = () => {
+    if (!shadow) outlinePath(ctx);
+  };
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.scale(s, s);
+
+  // Skids and cross tubes.
+  ctx.strokeStyle = shadow ? sil : f ? '#ffffff' : '#2a2d31';
+  ctx.lineWidth = 1.6;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-10, -9.5); ctx.lineTo(17, -9.5);
+  ctx.moveTo(-10, 9.5); ctx.lineTo(17, 9.5);
+  ctx.moveTo(-4, -9.5); ctx.lineTo(-4, 9.5);
+  ctx.moveTo(9, -9.5); ctx.lineTo(9, 9.5);
+  ctx.stroke();
+
+  // Tail boom with a small stabiliser.
+  ctx.fillStyle = lit(4, o.body);
+  ctx.beginPath();
+  ctx.moveTo(-6, -2.8); ctx.lineTo(-37, -1.3); ctx.lineTo(-37, 1.3); ctx.lineTo(-6, 2.8);
+  ctx.closePath();
+  ctx.fill();
+  outline();
+  ctx.beginPath();
+  ctx.roundRect(-30, -6.5, 4, 13, 1.5);
+  ctx.fill();
+  outline();
+  // Shrouded tail rotor.
+  ctx.fillStyle = lit(5, o.dark);
+  ctx.beginPath();
+  ctx.arc(-40, 0, 4.6, 0, TAU);
+  ctx.fill();
+  outline();
+
+  // Gun pods slung on the skid mounts.
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = lit(2, o.dark);
+    ctx.beginPath();
+    ctx.roundRect(3, side * 8 - 1.8, 14, 3.6, 1.8);
+    ctx.fill();
+    outline();
+  }
+
+  // Teardrop body.
+  ctx.fillStyle = lit(9, o.body);
+  ctx.beginPath();
+  ctx.moveTo(22, 0);
+  ctx.quadraticCurveTo(20, -9, 6, -9);
+  ctx.lineTo(-6, -7);
+  ctx.quadraticCurveTo(-11, 0, -6, 7);
+  ctx.lineTo(6, 9);
+  ctx.quadraticCurveTo(20, 9, 22, 0);
+  ctx.fill();
+  outline();
+
+  if (!shadow) {
+    ctx.strokeStyle = '#8a8f96';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(16, -8); ctx.lineTo(22, -8);
+    ctx.moveTo(16, 8); ctx.lineTo(22, 8);
+    ctx.stroke();
+
+    // Livery band on the boom and the engine housing behind the cabin.
+    ctx.fillStyle = f ? '#ffffff' : o.accent;
+    ctx.fillRect(-25, -2.1, 4, 4.2);
+    ctx.fillStyle = litFill(ctx, angle, 4, o.dark, f);
+    ctx.beginPath();
+    ctx.roundRect(-8, -3.5, 9, 7, 2.5);
+    ctx.fill();
+    ctx.fillStyle = '#0b0c0e';
+    ctx.beginPath();
+    ctx.ellipse(-8.5, 0, 1.5, 2.4, 0, 0, TAU);
+    ctx.fill();
+    if (o.turbo) {
+      const gr = ctx.createRadialGradient(-11, 0, 0, -11, 0, 16);
+      gr.addColorStop(0, 'rgba(255,230,160,0.95)');
+      gr.addColorStop(0.35, 'rgba(255,130,40,0.6)');
+      gr.addColorStop(1, 'rgba(255,60,0,0)');
+      ctx.fillStyle = gr;
+      ctx.beginPath();
+      ctx.arc(-13, 0, 16, 0, TAU);
+      ctx.fill();
+    }
+
+    // Big bubble canopy with a centre frame.
+    ctx.fillStyle = glassFill(ctx, angle, 7, o.glass);
+    ctx.beginPath();
+    ctx.ellipse(11, 0, 9, 7, 0, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = f ? '#ffffff' : shade(o.dark, -0.2);
+    ctx.lineWidth = 0.9;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(8, -6.6); ctx.lineTo(8, 6.6);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.beginPath();
+    ctx.ellipse(13.5, -3, 3.4, 1.4, -0.4, 0, TAU);
+    ctx.fill();
+
+    // Navigation lights and the tail rotor's spinning blades.
+    ctx.fillStyle = '#ff3b30';
+    ctx.beginPath();
+    ctx.arc(17, -9.5, 1.1, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#34d36a';
+    ctx.beginPath();
+    ctx.arc(17, 9.5, 1.1, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(220,220,220,0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const ta = rotor * 3;
+    ctx.moveTo(-40 - Math.cos(ta) * 3.2, -Math.sin(ta) * 3.2);
+    ctx.lineTo(-40 + Math.cos(ta) * 3.2, Math.sin(ta) * 3.2);
+    ctx.stroke();
+  }
+
+  ctx.translate(3, 0);
+  drawRotor(ctx, 32, 3, rotor, shadow);
+  ctx.restore();
+}
+
+// Heavy tandem-rotor gunship: long armoured hull, stub wings with gun pods, two rotors.
+function drawHeavy(ctx, x, y, angle, rotor, o) {
+  const s = o.scale || 1;
+  const shadow = !!o.shadow, f = !!o.flash;
+  const sil = 'rgba(0,0,0,0.22)';
+  const lit = (r, c) => (shadow ? sil : litFill(ctx, angle, r, c, f));
+  const outline = () => {
+    if (!shadow) outlinePath(ctx);
+  };
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.scale(s, s);
+
+  // Stub wings with a gun pod and a missile rail on each side.
+  ctx.fillStyle = lit(26, o.body);
+  ctx.beginPath();
+  ctx.moveTo(-6, -27); ctx.lineTo(6, -27); ctx.lineTo(9, -10); ctx.lineTo(9, 10);
+  ctx.lineTo(6, 27); ctx.lineTo(-6, 27); ctx.lineTo(-8, 10); ctx.lineTo(-8, -10);
+  ctx.closePath();
+  ctx.fill();
+  outline();
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = lit(4, o.dark);
+    ctx.beginPath();
+    ctx.roundRect(-10, side * 24 - 3.8, 25, 7.6, 3.8);
+    ctx.fill();
+    outline();
+    ctx.fillStyle = shadow ? sil : f ? '#ffffff' : '#d8d4c8';
+    ctx.beginPath();
+    ctx.roundRect(-6, side * 16 - 1.4, 16, 2.8, 1.4);
+    ctx.fill();
+  }
+
+  // Engine nacelles on the rear flanks.
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = lit(4, o.dark);
+    ctx.beginPath();
+    ctx.roundRect(-34, side * 13 - 3.5, 20, 7, 3.5);
+    ctx.fill();
+    outline();
+  }
+
+  // Hull.
+  ctx.fillStyle = lit(12, o.body);
+  ctx.beginPath();
+  ctx.moveTo(38, -5); ctx.quadraticCurveTo(38, -10, 30, -10.5);
+  ctx.lineTo(-34, -10); ctx.quadraticCurveTo(-40, -10, -40, -4);
+  ctx.lineTo(-40, 4); ctx.quadraticCurveTo(-40, 10, -34, 10);
+  ctx.lineTo(30, 10.5); ctx.quadraticCurveTo(38, 10, 38, 5);
+  ctx.closePath();
+  ctx.fill();
+  outline();
+
+  if (!shadow) {
+    ctx.strokeStyle = '#8a8f96';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(15, -24); ctx.lineTo(30, -24);
+    ctx.moveTo(15, 24); ctx.lineTo(30, 24);
+    ctx.stroke();
+    ctx.fillStyle = '#b8342a';
+    ctx.fillRect(9.5, -17.4, 2, 2.8);
+    ctx.fillRect(9.5, 14.6, 2, 2.8);
+
+    // Rotor pylons, a spine stripe and armour panel lines.
+    ctx.fillStyle = f ? '#ffffff' : o.accent;
+    ctx.fillRect(-22, -1.2, 36, 2.4);
+    for (const px of [24, -28]) {
+      ctx.fillStyle = litFill(ctx, angle, 6, o.dark, f);
+      ctx.beginPath();
+      ctx.roundRect(px - 7, -6, 14, 12, 4);
+      ctx.fill();
+      outlinePath(ctx);
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    for (const lx of [-12, 2, 14]) {
+      ctx.moveTo(lx, -10); ctx.lineTo(lx, 10);
+    }
+    ctx.stroke();
+    for (const side of [-1, 1]) {
+      ctx.fillStyle = '#0b0c0e';
+      ctx.beginPath();
+      ctx.ellipse(-34, side * 13, 1.6, 2.6, 0, 0, TAU);
+      ctx.fill();
+    }
+    if (o.turbo) {
+      const gr = ctx.createRadialGradient(-38, 0, 0, -38, 0, 26);
+      gr.addColorStop(0, 'rgba(255,230,160,0.95)');
+      gr.addColorStop(0.35, 'rgba(255,130,40,0.6)');
+      gr.addColorStop(1, 'rgba(255,60,0,0)');
+      ctx.fillStyle = gr;
+      ctx.beginPath();
+      ctx.arc(-40, 0, 26, 0, TAU);
+      ctx.fill();
+    }
+
+    // Wide cockpit glazing across the nose.
+    ctx.fillStyle = glassFill(ctx, angle, 8, o.glass);
+    ctx.beginPath();
+    ctx.moveTo(36.5, -4.5); ctx.quadraticCurveTo(36, -8.5, 31, -8.5);
+    ctx.lineTo(31, 8.5); ctx.quadraticCurveTo(36, 8.5, 36.5, 4.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = f ? '#ffffff' : shade(o.dark, -0.3);
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(31, -3); ctx.lineTo(37, -3);
+    ctx.moveTo(31, 3); ctx.lineTo(37, 3);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillRect(32.5, -7, 2.5, 3);
+
+    ctx.fillStyle = '#ff3b30';
+    ctx.beginPath();
+    ctx.arc(0, -27.6, 1.4, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#34d36a';
+    ctx.beginPath();
+    ctx.arc(0, 27.6, 1.4, 0, TAU);
+    ctx.fill();
+  }
+
+  // Counter-rotating rotors fore and aft.
+  ctx.translate(24, 0);
+  drawRotor(ctx, 30, 3, rotor, shadow);
+  ctx.translate(-52, 0);
+  drawRotor(ctx, 30, 3, -rotor + 0.5, shadow);
   ctx.restore();
 }
 
@@ -592,18 +864,57 @@ class Pickup {
 
 // ---------------------------------------------------------------- player
 
-// Player airframes: how each one looks and handles. A vehicle selector can offer
-// any of these by passing it to new Player(); Stormwolf is the default.
+// Player airframes, chosen in the hangar: how each one looks and handles.
+// gun: muzzle position (x forward, y to each side), seconds between rounds, damage, heat per round.
+// missileMount: launch position (x forward, y to each side). turn: nose turn rate in rad/s.
 const VEHICLES = {
   stormwolf: {
     name: 'STORMWOLF',
+    role: 'ATTACK HELICOPTER',
+    blurb: 'The all-rounder. Solid armour, a good missile load and twin wing guns.',
     draw: drawChopper,
     colors: { body: '#1b1f24', dark: '#2c3238', accent: '#e9ecef', glass: '#294d66' },
+    r: 20,
     hp: 100,
     missiles: 8,
     flares: 4,
     speed: 270,
     turboSpeed: 580,
+    turn: 7,
+    gun: { x: 24, y: 19.5, cd: 0.06, dmg: 7, heat: 2.8 },
+    missileMount: { x: 4, y: 20 },
+  },
+  kestrel: {
+    name: 'KESTREL',
+    role: 'SCOUT HELICOPTER',
+    blurb: 'Fast and nimble with a fast-firing gun and extra flares, but light armour.',
+    draw: drawScout,
+    colors: { body: '#c4c9ce', dark: '#6f7880', accent: '#ff8a1f', glass: '#2b5a78' },
+    r: 16,
+    hp: 65,
+    missiles: 4,
+    flares: 7,
+    speed: 335,
+    turboSpeed: 690,
+    turn: 10,
+    gun: { x: 22, y: 8, cd: 0.045, dmg: 5, heat: 2.2 },
+    missileMount: { x: 8, y: 8 },
+  },
+  titan: {
+    name: 'TITAN',
+    role: 'HEAVY GUNSHIP',
+    blurb: 'A flying tank. Huge armour and missile load, heavy guns, slow to turn.',
+    draw: drawHeavy,
+    colors: { body: '#2b3a52', dark: '#1a2433', accent: '#e0b84a', glass: '#3a5a6e' },
+    r: 26,
+    hp: 170,
+    missiles: 14,
+    flares: 4,
+    speed: 205,
+    turboSpeed: 440,
+    turn: 4.5,
+    gun: { x: 30, y: 24, cd: 0.075, dmg: 10, heat: 3 },
+    missileMount: { x: 10, y: 16 },
   },
 };
 
@@ -613,7 +924,7 @@ class Player {
     this.x = x; this.y = y; this.vx = 0; this.vy = 0;
     this.angle = -Math.PI / 2;
     this.aimAngle = this.angle;
-    this.r = 20;
+    this.r = vehicle.r;
     this.hp = this.maxHp = vehicle.hp;
     this.missiles = this.maxMissiles = vehicle.missiles;
     this.flares = this.maxFlares = vehicle.flares;
@@ -646,7 +957,7 @@ class Player {
     this.x = clamp(this.x + this.vx * dt, 40, WORLD_W - 40);
     this.y = clamp(this.y + this.vy * dt, 40, WORLD_H - 40);
 
-    this.angle = turnToward(this.angle, Math.atan2(c.aimY - this.y, c.aimX - this.x), 7 * dt);
+    this.angle = turnToward(this.angle, Math.atan2(c.aimY - this.y, c.aimX - this.x), this.vehicle.turn * dt);
     this.rotor += dt * (this.turboOn ? 52 : 40);
 
     this.gunCd -= dt; this.misCd -= dt; this.flareCd -= dt; this.hitFlash -= dt;
@@ -655,17 +966,18 @@ class Player {
 
     const ca = Math.cos(this.angle), sa = Math.sin(this.angle);
 
+    const gun = this.vehicle.gun, mm = this.vehicle.missileMount;
     if (c.fire && !this.overheat && this.gunCd <= 0) {
-      this.gunCd = 0.06;
-      this.heat += 2.8;
+      this.gunCd = gun.cd;
+      this.heat += gun.heat;
       if (this.heat >= 100) {
         this.heat = 100;
         this.overheat = true;
         Sfx.overheat();
       }
       this.gunSide *= -1;
-      const ox = this.x + ca * 24 - sa * 19.5 * this.gunSide;
-      const oy = this.y + sa * 24 + ca * 19.5 * this.gunSide;
+      const ox = this.x + ca * gun.x - sa * gun.y * this.gunSide;
+      const oy = this.y + sa * gun.x + ca * gun.y * this.gunSide;
       let a = this.angle;
       // Keyboard players get a little help: rounds bend onto a target that is nearly dead ahead.
       const t = g.lockTarget;
@@ -674,7 +986,7 @@ class Player {
         if (Math.abs(angDiff(this.angle, ta)) < 0.22) a = ta;
       }
       a += rand(-0.035, 0.035);
-      g.bullets.push(new Bullet(ox, oy, Math.cos(a) * 980 + this.vx * 0.5, Math.sin(a) * 980 + this.vy * 0.5, 'p', 7, 0.7));
+      g.bullets.push(new Bullet(ox, oy, Math.cos(a) * 980 + this.vx * 0.5, Math.sin(a) * 980 + this.vy * 0.5, 'p', gun.dmg, 0.7));
       g.particles.push(new Particle(ox, oy, this.vx, this.vy, 0.05, 5, 0, 'muzzle'));
       Sfx.gun();
     }
@@ -683,8 +995,8 @@ class Player {
       this.misCd = 0.4;
       this.missiles--;
       this.misSide *= -1;
-      const ox = this.x + ca * 4 - sa * 20 * this.misSide;
-      const oy = this.y + sa * 4 + ca * 20 * this.misSide;
+      const ox = this.x + ca * mm.x - sa * mm.y * this.misSide;
+      const oy = this.y + sa * mm.x + ca * mm.y * this.misSide;
       const spd = Math.hypot(this.vx, this.vy);
       g.missiles.push(new Missile(ox, oy, this.angle, 'p', g.lockTarget,
         { speed: 260 + spd * 0.5, maxSpeed: 840, accel: 950, turn: 4.8, dmg: 55, life: 2.8 }));

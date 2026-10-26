@@ -32,7 +32,7 @@ python -m http.server 8000
 
 Then go to http://localhost:8000 (or whatever port `serve` prints).
 
-Your best score and key bindings are saved in the browser's `localStorage`.
+Your best score, key bindings and chosen aircraft are saved in the browser's `localStorage`.
 
 ## Controls
 
@@ -52,11 +52,21 @@ The mouse also works for aiming and firing. On phones and tablets you get twin-s
 
 Land on your base pad to repair and rearm. Your guns overheat if you hold the trigger too long. Flares break enemy missile locks.
 
-## Sprites and vehicles
+## Aircraft
+
+After the title screen, the hangar lets you pick your aircraft. Use ← / → (or A / D) to browse and Space to launch. With a mouse or on a touchscreen, click or tap the sides of the screen to browse and the middle to launch. Esc goes back to the title. The game remembers your choice next time.
+
+| Aircraft | Role | Strengths | Weaknesses |
+| --- | --- | --- | --- |
+| **Stormwolf** | Attack helicopter | All-rounder: solid armour, 8 missiles, twin wing guns | Doesn't excel at anything |
+| **Kestrel** | Scout helicopter | Fastest and most agile, quick-firing gun, 7 flares, small target | Light armour, only 4 missiles |
+| **Titan** | Heavy twin-rotor gunship | Huge armour, 14 missiles, hardest-hitting guns | Slow, turns sluggishly, big target |
+
+Each aircraft is an entry in the `VEHICLES` list in `src/entities.js`. An entry sets how the aircraft looks (its draw function and colours) and how it handles: armour, missiles, flares, cruise and turbo speed, turn rate, hitbox size, gun position, fire rate, damage and heat, and where missiles launch from. Add an entry and it appears in the hangar automatically.
+
+## Sprites
 
 Every sprite is drawn in code in `src/entities.js`, lit from the top-left to match the shadows. Open `sprites.html` (served the same way as the game) to see them all at 2× size.
-
-The player's helicopter is defined in the `VEHICLES` list in `src/entities.js`. Each entry sets how the aircraft looks (its draw function and colours) and how it handles (armour, missiles, flares, cruise speed and turbo speed). Stormwolf is the only one so far. A vehicle selector can add more entries and pass the chosen one to `new Player(x, y, vehicle)`.
 
 ## Missions
 
