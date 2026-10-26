@@ -133,6 +133,7 @@ const G = {
   startMission(i) {
     this.missionIndex = i;
     this.mission = MISSIONS[i % MISSIONS.length];
+    Music.play(i % MISSIONS.length);
     const tour = Math.floor(i / MISSIONS.length);
     this.difficulty = 1 + (i % MISSIONS.length) * 0.12 + tour * 0.4;
     this.missionStartScore = this.score;
