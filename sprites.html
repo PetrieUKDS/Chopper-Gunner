@@ -48,6 +48,11 @@
       { label: 'TRUCK', e: make.truck(), zoom: 1.2 },
       { label: 'TANK', e: make.tank(), zoom: 1.2 },
       { label: 'SAM SITE', e: make.sam(), zoom: 1.1 },
+      { label: 'AA GUN', e: Object.assign(new AAGun(0, 0, 1), { turret: -0.7 }), zoom: 1.5 },
+      { label: 'GUNBOAT', e: Object.assign(new PatrolBoat(0, 0, 1, true), { angle: -0.6, turret: -0.2, wake: 1 }), zoom: 1.2 },
+      { label: 'FUEL DEPOT', e: Object.assign(new FuelDepot(0, 0, 1), { angle: 0.3 }), zoom: 1 },
+      { label: 'GENERATOR', e: Object.assign(new Generator(0, 0, 1), { angle: -0.4, fan: 0.5 }), zoom: 1.2 },
+      { label: 'COMMAND BUNKER (SHIELDED)', e: Object.assign(new Bunker(0, 0, 1), { turret: -0.8 }), zoom: 0.8 },
     ];
 
     const canvas = document.getElementById('sheet');

@@ -1,6 +1,5 @@
 'use strict';
 
-const MAP_SEED = 1984;
 const VEHICLE_KEY = 'chopperGunner.vehicle';
 
 const G = {
@@ -47,7 +46,7 @@ const G = {
     window.addEventListener('resize', () => this.resize());
     this.resize();
     Input.init(this.canvas);
-    Noise.seed(MAP_SEED);
+    setTheatre(MISSIONS[0].theatre);
     this.terrain = new Terrain();
     this.base = this.findBase();
     this.cam.x = this.base.x;
@@ -74,7 +73,7 @@ const G = {
 
   // A flat-ish spot inland for the home helipad.
   findBase() {
-    const rng = mulberry32(MAP_SEED);
+    const rng = mulberry32(THEATRE.seed);
     for (let i = 0; i < 4000; i++) {
       const r = 300 + i * 0.8;
       const a = rng() * TAU;
@@ -107,10 +106,25 @@ const G = {
     return fallback || { x: clamp(from.x + minD, 200, WORLD_W - 200), y: from.y };
   },
 
+  // A spot on open water near the coast, for boats.
+  waterPoint(from, minD, maxD, extra) {
+    let fallback = null;
+    for (let i = 0; i < 1200; i++) {
+      const a = rand(0, TAU), d = rand(minD, maxD + i * 2);
+      const x = from.x + Math.cos(a) * d, y = from.y + Math.sin(a) * d;
+      if (!isWater(x, y) || heightAt(x, y) < SEA_LEVEL - 0.14) continue;
+      fallback = fallback || { x, y };
+      if (extra && !extra({ x, y })) continue;
+      return { x, y };
+    }
+    return fallback || this.landPoint(from, minD, maxD);
+  },
+
   make(type, x, y) {
     const d = this.difficulty;
     switch (type) {
       case 'jeep': return new Jeep(x, y, d);
+      case 'aa': return new AAGun(x, y, d);
       case 'tank': return new Tank(x, y, d);
       case 'gunship': return new Gunship(x, y, d);
       case 'sam': return new SamSite(x, y, d);
@@ -136,9 +150,11 @@ const G = {
   startMission(i) {
     this.missionIndex = i;
     this.mission = MISSIONS[i % MISSIONS.length];
-    Music.play(i % MISSIONS.length);
+    Music.play(this.mission.music);
     const tour = Math.floor(i / MISSIONS.length);
-    this.difficulty = 1 + (i % MISSIONS.length) * 0.12 + tour * 0.4;
+    this.difficulty = 1 + (i % MISSIONS.length) * 0.08 + tour * 0.4;
+    setTheatre(this.mission.theatre);
+    this.base = this.findBase();
     this.missionStartScore = this.score;
     this.enemies = []; this.bullets = []; this.ebullets = []; this.missiles = []; this.flares = [];
     this.particles = []; this.pickups = []; this.floaters = []; this.emitters = []; this.banners = [];
@@ -956,7 +972,7 @@ const G = {
     const x = (w - pw) / 2;
     let y = Math.max(60, h * 0.2);
     const tour = Math.floor(this.missionIndex / MISSIONS.length);
-    Hud.text(ctx, `OVERWATCH SECURE BRIEFING${tour ? ' - TOUR ' + (tour + 1) : ''}`, x, y, { size: 13, color: '#9fb4c0' });
+    Hud.text(ctx, `OVERWATCH SECURE BRIEFING - ${THEATRE.label}${tour ? ' - TOUR ' + (tour + 1) : ''}`, x, y, { size: 13, color: '#9fb4c0' });
     y += 34;
     Hud.text(ctx, this.mission.title, x, y, { size: small ? 20 : 30, font: TITLE_FONT, weight: '700', color: HUD_AMBER });
     y += 36;

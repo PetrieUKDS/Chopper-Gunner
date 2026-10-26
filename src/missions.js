@@ -1,10 +1,12 @@
 'use strict';
 
-// Each mission sets up the map and decides when it is won or lost.
-// After the last mission the campaign loops with tougher enemies.
+// Each mission picks a theatre (map and look) and a soundtrack, sets up the map,
+// and decides when it is won or lost. After the last mission the campaign loops with tougher enemies.
 const MISSIONS = [
   {
     title: 'OPERATION SANDSTORM',
+    theatre: 'desert',
+    music: 0,
     brief: [
       'Overwatch to Stormwolf.',
       'Militia forces have seized three surface-to-air missile sites in the interior.',
@@ -35,6 +37,8 @@ const MISSIONS = [
   },
   {
     title: 'OPERATION IRON ROAD',
+    theatre: 'temperate',
+    music: 1,
     brief: [
       'Overwatch to Stormwolf.',
       'An arms convoy is moving along the highway toward the northern border crossing.',
@@ -85,12 +89,110 @@ const MISSIONS = [
     },
   },
   {
+    title: 'OPERATION FROSTBITE',
+    theatre: 'arctic',
+    music: 3,
+    brief: [
+      'Overwatch to Stormwolf.',
+      'The militia is fuelling its armour from depots hidden across the northern tundra.',
+      'Cut off their supply. Destroy all five fuel depots.',
+      'Each depot is ringed with anti-aircraft guns. Their bursts are short, but they hurt.',
+      'Depots burn hot - do not hover over one when it goes up.',
+    ],
+    reinforce: { every: 14, cap: 18, types: ['jeep', 'tank', 'gunship', 'aa'] },
+    setup(g) {
+      const placed = [];
+      for (let i = 0; i < 5; i++) {
+        const pt = g.landPoint(g.base, 1000, 2900, (p) => placed.every((q) => dist(p.x, p.y, q.x, q.y) > 750));
+        placed.push(pt);
+        g.enemies.push(new FuelDepot(pt.x, pt.y, g.difficulty));
+        for (let j = 0; j < 2; j++) g.spawnNear('aa', pt, 110, 220);
+        g.spawnNear(i % 2 ? 'tank' : 'jeep', pt, 150, 320);
+      }
+      for (let i = 0; i < 4; i++) g.spawnNear('jeep', g.base, 900, 2400);
+    },
+    objective(g) {
+      return `FUEL DEPOTS REMAINING: ${g.objectivesLeft()}`;
+    },
+    status(g) {
+      return g.objectivesLeft() === 0 ? 'won' : null;
+    },
+  },
+  {
+    title: 'OPERATION GREEN HELL',
+    theatre: 'jungle',
+    music: 4,
+    brief: [
+      'Overwatch to Stormwolf.',
+      'Militia gunboats are running weapons along the jungle coast.',
+      'Sink all six. Two of them carry anti-air missiles.',
+      'Expect gun positions along the shoreline and gunships under the canopy.',
+    ],
+    reinforce: { every: 13, cap: 16, types: ['gunship', 'jeep', 'aa', 'jet'] },
+    setup(g) {
+      const placed = [];
+      for (let i = 0; i < 6; i++) {
+        const pt = g.waterPoint(g.base, 900, 2800, (p) => placed.every((q) => dist(p.x, p.y, q.x, q.y) > 550));
+        placed.push(pt);
+        g.enemies.push(Object.assign(new PatrolBoat(pt.x, pt.y, g.difficulty, i < 2), { objective: true }));
+        if (i % 2 === 0) g.spawnNear('aa', pt, 150, 450);
+      }
+      for (let i = 0; i < 2; i++) g.spawnNear('gunship', placed[i * 3], 200, 500);
+      for (let i = 0; i < 4; i++) g.spawnNear('jeep', g.base, 900, 2400);
+    },
+    objective(g) {
+      return `GUNBOATS REMAINING: ${g.objectivesLeft()}`;
+    },
+    status(g) {
+      return g.objectivesLeft() === 0 ? 'won' : null;
+    },
+  },
+  {
+    title: 'OPERATION BLACK GOLD',
+    theatre: 'ash',
+    music: 5,
+    brief: [
+      'Overwatch to Stormwolf.',
+      'Militia command is dug in beneath the volcanic oil fields.',
+      'Their bunker sits behind an energy shield fed by three generators.',
+      'Knock out the generators to drop the shield, then flatten the bunker.',
+      'The bunker fires flak and missiles. Keep your flares ready.',
+    ],
+    reinforce: { every: 12, cap: 18, types: ['tank', 'jeep', 'gunship', 'aa', 'jet'] },
+    setup(g) {
+      const hq = g.landPoint(g.base, 2200, 3200);
+      g.enemies.push(new Bunker(hq.x, hq.y, g.difficulty));
+      const sam = g.landPoint(hq, 250, 450);
+      g.enemies.push(new SamSite(sam.x, sam.y, g.difficulty));
+      const placed = [];
+      for (let i = 0; i < 3; i++) {
+        const pt = g.landPoint(hq, 550, 1100, (p) => placed.every((q) => dist(p.x, p.y, q.x, q.y) > 550));
+        placed.push(pt);
+        g.enemies.push(new Generator(pt.x, pt.y, g.difficulty));
+        g.spawnNear('aa', pt, 110, 220);
+        g.spawnNear('tank', pt, 150, 320);
+      }
+      for (let i = 0; i < 2; i++) g.spawnNear('aa', hq, 120, 260);
+      for (let i = 0; i < 5; i++) g.spawnNear(i % 2 ? 'tank' : 'jeep', g.base, 900, 2400);
+    },
+    objective(g) {
+      const gens = g.enemies.filter((e) => e instanceof Generator && !e.dead).length;
+      if (gens) return `GENERATORS: ${gens}   BUNKER SHIELDED`;
+      return g.objectivesLeft() ? 'DESTROY THE COMMAND BUNKER' : 'COMMAND BUNKER DESTROYED';
+    },
+    status(g) {
+      return g.objectivesLeft() === 0 ? 'won' : null;
+    },
+  },
+  {
     title: 'OPERATION RED TALON',
+    theatre: 'canyon',
+    music: 2,
     brief: [
       'Overwatch to Stormwolf. This one is personal.',
       'The militia has a stolen prototype gunship - callsign RED TALON.',
       'Same airframe as yours: fast, armoured, and carrying its own missiles.',
-      'It is hiding out in the far hills under SAM cover.',
+      'It is hiding out in the red canyons under SAM cover.',
       'Find it, and bring it down.',
     ],
     reinforce: { every: 13, cap: 16, types: ['gunship', 'jet', 'jeep', 'tank'] },
