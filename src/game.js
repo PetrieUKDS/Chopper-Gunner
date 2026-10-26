@@ -1,6 +1,7 @@
 'use strict';
 
 const MAP_SEED = 1984;
+const VEHICLE_KEY = 'chopperGunner.vehicle';
 
 const G = {
   canvas: null,
@@ -38,6 +39,7 @@ const G = {
   result: null,
   aimMode: 'keys', // 'mouse' or 'keys': whichever was used last steers the nose
   menu: { row: 0, slot: 0, from: 'title', waiting: false },
+  vehicle: VEHICLES.stormwolf,
 
   init() {
     this.canvas = document.getElementById('game');
@@ -50,12 +52,13 @@ const G = {
     this.base = this.findBase();
     this.cam.x = this.base.x;
     this.cam.y = this.base.y;
-    this.player = new Player(this.base.x, this.base.y);
     try {
       this.best = Number(localStorage.getItem('chopperGunner.best')) || 0;
+      this.vehicle = VEHICLES[localStorage.getItem(VEHICLE_KEY)] || this.vehicle;
     } catch (e) {
       this.best = 0;
     }
+    this.player = new Player(this.base.x, this.base.y, this.vehicle);
     requestAnimationFrame((t) => this.loop(t));
   },
 
@@ -143,7 +146,7 @@ const G = {
     this.escaped = 0;
     this.checkpoint = null;
     this.terrain.reset();
-    this.player = new Player(this.base.x, this.base.y);
+    this.player = new Player(this.base.x, this.base.y, this.vehicle);
     this.aimMode = 'keys';
     this.mission.setup(this);
     this.reinforceT = this.mission.reinforce.every;
@@ -346,15 +349,18 @@ const G = {
         }
         if (this.stateT > 0.3 && Input.confirm()) {
           Sfx.confirm();
-          this.newGame();
+          this.setState('hangar');
         }
+        break;
+      case 'hangar':
+        this.updateHangar();
         break;
       case 'briefing':
         this.player.rotor += dt * 40;
         if (this.stateT > 0.5 && Input.confirm()) {
           Sfx.confirm();
           this.setState('play');
-          this.banner('STORMWOLF - LAUNCH', HUD_GREEN);
+          this.banner(`${this.vehicle.name} - LAUNCH`, HUD_GREEN);
         }
         break;
       case 'paused':
@@ -442,6 +448,42 @@ const G = {
 
   closeControls() {
     this.setState(this.menu.from);
+  },
+
+  // Aircraft selection between the title and the first briefing.
+  updateHangar() {
+    const ids = Object.keys(VEHICLES);
+    const step = (d) => {
+      const i = (ids.indexOf(this.pickId()) + d + ids.length) % ids.length;
+      this.vehicle = VEHICLES[ids[i]];
+      this.player = new Player(this.base.x, this.base.y, this.vehicle);
+      try {
+        localStorage.setItem(VEHICLE_KEY, ids[i]);
+      } catch (e) { /* storage unavailable */ }
+      Sfx.beep();
+    };
+    if (Input.hit('ArrowLeft') || Input.hit('KeyA') || Input.actionHit('turnLeft')) step(-1);
+    if (Input.hit('ArrowRight') || Input.hit('KeyD') || Input.actionHit('turnRight')) step(1);
+    if (Input.hit('Escape')) {
+      this.setState('title');
+      return;
+    }
+    // Pointer: the side thirds of the screen page through the aircraft, the middle launches.
+    let launch = this.stateT > 0.3 && (Input.hit('Space') || Input.hit('Enter'));
+    if (Input.tapped && this.stateT > 0.3) {
+      const x = Input.tapX;
+      if (x < this.w / 3) step(-1);
+      else if (x > (this.w * 2) / 3) step(1);
+      else launch = true;
+    }
+    if (launch) {
+      Sfx.confirm();
+      this.newGame();
+    }
+  },
+
+  pickId() {
+    return Object.keys(VEHICLES).find((id) => VEHICLES[id] === this.vehicle);
   },
 
   checkMission() {
@@ -664,14 +706,15 @@ const G = {
     for (const e of this.enemies) if (!e.air && inView(e)) e.draw(ctx);
 
     for (const e of this.enemies) if (e.air && inView(e)) e.drawShadow(ctx);
-    if (!this.player.dead) this.player.drawShadow(ctx);
+    const showPlayer = !this.player.dead && this.state !== 'hangar';
+    if (showPlayer) this.player.drawShadow(ctx);
 
     for (const b of this.ebullets) if (inView(b)) b.draw(ctx);
     for (const b of this.bullets) if (inView(b)) b.draw(ctx);
     for (const m of this.missiles) if (inView(m)) m.draw(ctx);
 
     for (const e of this.enemies) if (e.air && inView(e)) e.draw(ctx);
-    if (!this.player.dead) this.player.draw(ctx);
+    if (showPlayer) this.player.draw(ctx);
 
     for (const pt of this.particles) if (!pt.additive && inView(pt)) pt.draw(ctx);
     ctx.globalCompositeOperation = 'lighter';
@@ -693,6 +736,7 @@ const G = {
     ctx.setTransform(d, 0, 0, d, 0, 0);
     switch (this.state) {
       case 'title': this.drawTitle(ctx); break;
+      case 'hangar': this.drawHangar(ctx); break;
       case 'controls':
         if (this.menu.from === 'title') this.dim(ctx, 0.3);
         this.drawControls(ctx);
@@ -813,6 +857,97 @@ const G = {
     if (this.best) Hud.text(ctx, `BEST ${this.best}`, w / 2, h * 0.9 + 28, { size: 13, align: 'center', color: '#9fb4c0' });
   },
 
+  drawHangar(ctx) {
+    this.dim(ctx, 0.62);
+    const w = this.w, h = this.h;
+    const small = w < 600;
+    const v = this.vehicle;
+    const ids = Object.keys(VEHICLES);
+    const list = ids.map((id) => VEHICLES[id]);
+    const idx = ids.indexOf(this.pickId());
+
+    Hud.text(ctx, 'SELECT AIRCRAFT', w / 2, Math.max(44, h * 0.09), { size: small ? 20 : 28, align: 'center', font: TITLE_FONT, weight: '900', color: HUD_AMBER });
+
+    // The chosen aircraft, turning slowly on a lit pad.
+    const cy = h * (small ? 0.3 : 0.32);
+    const sc = clamp(Math.min(w, h * 0.8) / 300, 1.2, 2.6);
+    const pr = 46 * sc;
+    const pad = ctx.createRadialGradient(w / 2, cy, pr * 0.2, w / 2, cy, pr);
+    pad.addColorStop(0, 'rgba(125,255,176,0.14)');
+    pad.addColorStop(1, 'rgba(125,255,176,0)');
+    ctx.fillStyle = pad;
+    ctx.beginPath();
+    ctx.arc(w / 2, cy, pr, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(125,255,176,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(w / 2, cy, pr * 0.92, 0, TAU);
+    ctx.stroke();
+    const spin = -Math.PI / 2 + Math.sin(this.time * 0.6) * 0.5;
+    const rotor = this.time * 30;
+    const vs = (sc * 20) / v.r; // fit big and small airframes to the same pad
+    v.draw(ctx, w / 2 + 8 * sc, cy + 10 * sc, spin, rotor, { shadow: true, scale: vs * 0.92 });
+    v.draw(ctx, w / 2, cy, spin, rotor, { ...v.colors, scale: vs });
+
+    // Arrows either side.
+    const ax = Math.min(w * 0.38, 280);
+    for (const d of [-1, 1]) {
+      const x = w / 2 + d * ax;
+      ctx.fillStyle = 'rgba(125,255,176,0.75)';
+      ctx.beginPath();
+      ctx.moveTo(x + d * 12, cy);
+      ctx.lineTo(x - d * 8, cy - 16);
+      ctx.lineTo(x - d * 8, cy + 16);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    let y = cy + pr + (small ? 26 : 34);
+    Hud.text(ctx, v.name, w / 2, y, { size: small ? 22 : 30, align: 'center', font: TITLE_FONT, weight: '900', color: '#e9ecef' });
+    y += small ? 20 : 24;
+    Hud.text(ctx, v.role, w / 2, y, { size: small ? 12 : 14, align: 'center', color: HUD_AMBER });
+    y += small ? 20 : 24;
+    ctx.font = `${small ? 12 : 14}px ${FONT}`;
+    for (const line of this.wrap(ctx, v.blurb, Math.min(520, w - 40))) {
+      Hud.text(ctx, line, w / 2, y, { size: small ? 12 : 14, align: 'center', color: '#c8d6dc' });
+      y += small ? 17 : 20;
+    }
+
+    // Stat bars, scaled against the best in the fleet.
+    const stats = [
+      ['ARMOR', (u) => u.hp],
+      ['SPEED', (u) => u.speed],
+      ['AGILITY', (u) => u.turn],
+      ['FIREPOWER', (u) => u.gun.dmg / u.gun.cd],
+      ['MISSILES', (u) => u.missiles],
+      ['FLARES', (u) => u.flares],
+    ];
+    const bw = Math.min(220, w * 0.45), bx = w / 2 - bw / 2 + 40;
+    y += 12;
+    for (const [label, get] of stats) {
+      const max = Math.max(...list.map(get));
+      Hud.bar(ctx, bx, y, bw, 8, get(v) / max, HUD_GREEN, label);
+      y += small ? 16 : 19;
+    }
+
+    // Which of the fleet this is.
+    y += 10;
+    list.forEach((_, i) => {
+      ctx.fillStyle = i === idx ? HUD_AMBER : 'rgba(255,255,255,0.25)';
+      ctx.beginPath();
+      ctx.arc(w / 2 + (i - (list.length - 1) / 2) * 16, y, i === idx ? 4.5 : 3.5, 0, TAU);
+      ctx.fill();
+    });
+
+    const prompt = Input.touchMode
+      ? 'TAP THE SIDES TO CHOOSE - TAP THE MIDDLE TO LAUNCH'
+      : '\u2190 \u2192 CHOOSE    SPACE / CLICK LAUNCH    ESC BACK';
+    if (Math.floor(this.time * 2) % 2 === 0) {
+      Hud.text(ctx, prompt, w / 2, Math.min(h - 24, y + (small ? 34 : 44)), { size: small ? 12 : 16, align: 'center', color: HUD_GREEN });
+    }
+  },
+
   drawBriefing(ctx) {
     this.dim(ctx, 0.72);
     const w = this.w, h = this.h;
@@ -929,7 +1064,7 @@ const G = {
   },
 
   drawFailed(ctx) {
-    const title = this.result === 'down' ? 'STORMWOLF DOWN' : 'MISSION FAILED';
+    const title = this.result === 'down' ? `${this.vehicle.name} DOWN` : 'MISSION FAILED';
     const why = this.result === 'down' ? 'Your armor gave out.' : 'Too many trucks crossed the border.';
     this.drawCenterPanel(ctx, title, [why, '', 'PRESS SPACE / TAP TO RETRY'], HUD_RED);
   },
