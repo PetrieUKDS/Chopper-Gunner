@@ -226,14 +226,8 @@ const Hud = {
       ctx.arc(s.ox + st.x * 60, s.oy + st.y * 60, 24, 0, TAU);
       ctx.fill();
     }
-    const hint = { size: 12, align: 'center', color: 'rgba(255,255,255,0.35)', shadow: false };
-    if (Input.touchStyle === 'easy') {
-      if (!Input.sticks.move) this.text(ctx, 'THUMB ANYWHERE TO FLY  ·  GUNS AUTO-AIM', g.w / 2, g.h - 64, hint);
-      else if (!Input.sticks.aim) this.text(ctx, 'SECOND THUMB TO AIM BY HAND', g.w / 2, g.h - 64, hint);
-    } else {
-      if (!Input.sticks.move) this.text(ctx, 'MOVE', 70, g.h - 60, hint);
-      if (!Input.sticks.aim) this.text(ctx, 'AIM + FIRE', g.w - 160, g.h - 60, hint);
-    }
+    if (!Input.sticks.move) this.text(ctx, 'MOVE', 70, g.h - 60, { size: 12, align: 'center', color: 'rgba(255,255,255,0.35)', shadow: false });
+    if (!Input.sticks.aim) this.text(ctx, 'AIM + FIRE', g.w - 160, g.h - 60, { size: 12, align: 'center', color: 'rgba(255,255,255,0.35)', shadow: false });
     for (const b of Input.btnLayout) {
       const held = Input.buttons[b.id] !== undefined;
       ctx.fillStyle = held ? 'rgba(255,192,74,0.45)' : 'rgba(0,0,0,0.35)';
@@ -243,7 +237,7 @@ const Hud = {
       ctx.arc(b.x, b.y, b.r, 0, TAU);
       ctx.fill();
       ctx.stroke();
-      this.text(ctx, b.label, b.x, b.y + 5, { size: b.r > 40 ? 15 : 13, align: 'center', color: '#ffffff', shadow: false });
+      this.text(ctx, b.label, b.x, b.y + 5, { size: 13, align: 'center', color: '#ffffff', shadow: false });
     }
   },
 
