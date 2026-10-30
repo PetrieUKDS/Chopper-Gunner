@@ -46,6 +46,7 @@ const G = {
     window.addEventListener('resize', () => this.resize());
     this.resize();
     Input.init(this.canvas);
+    Save.load();
     setTheatre(MISSIONS[0].theatre);
     this.terrain = new Terrain();
     this.base = this.findBase();
@@ -58,6 +59,7 @@ const G = {
       this.best = 0;
     }
     this.player = new Player(this.base.x, this.base.y, this.vehicle);
+    Weather.set(THEATRE.weather, this.w, this.h);
     requestAnimationFrame((t) => this.loop(t));
   },
 
@@ -142,18 +144,14 @@ const G = {
 
   // ------------------------------------------------------------ flow
 
-  newGame() {
-    this.score = 0;
-    this.startMission(0);
-  },
-
   startMission(i) {
     this.missionIndex = i;
     this.mission = MISSIONS[i % MISSIONS.length];
     Music.play(this.mission.music);
     const tour = Math.floor(i / MISSIONS.length);
-    this.difficulty = 1 + (i % MISSIONS.length) * 0.08 + tour * 0.4;
+    this.difficulty = (1 + (i % MISSIONS.length) * 0.08 + tour * 0.4) * Save.difficulty().enemy;
     setTheatre(this.mission.theatre);
+    Weather.set(THEATRE.weather, this.w, this.h);
     this.base = this.findBase();
     this.missionStartScore = this.score;
     this.enemies = []; this.bullets = []; this.ebullets = []; this.missiles = []; this.flares = [];
@@ -162,7 +160,7 @@ const G = {
     this.escaped = 0;
     this.checkpoint = null;
     this.terrain.reset();
-    this.player = new Player(this.base.x, this.base.y, this.vehicle);
+    this.player = new Player(this.base.x, this.base.y, this.vehicle, Save.mods());
     this.aimMode = 'keys';
     this.mission.setup(this);
     this.reinforceT = this.mission.reinforce.every;
@@ -332,6 +330,23 @@ const G = {
       }
       c.fire = Input.mouse.left || Input.action('fire') || Input.actionHit('fire');
     }
+    const pad = Input.pad;
+    if (pad) {
+      c.mx += pad.lx;
+      c.my += pad.ly;
+      if (Math.hypot(pad.rx, pad.ry) > 0.35) {
+        const ang = Math.atan2(pad.ry, pad.rx);
+        p.aimAngle = ang;
+        c.aimX = p.x + Math.cos(ang) * 300;
+        c.aimY = p.y + Math.sin(ang) * 300;
+        c.assist = true;
+        this.aimMode = 'keys';
+      }
+      c.fire = c.fire || pad.fire;
+      c.missile = c.missile || pad.missile;
+      c.flare = c.flare || pad.flareHit;
+      c.turbo = c.turbo || pad.turbo;
+    }
     return c;
   },
 
@@ -349,7 +364,10 @@ const G = {
   update(dt) {
     this.time += dt;
     this.stateT += dt;
-    if (this.state !== 'controls' && Input.actionHit('mute')) Sfx.toggleMute();
+    Input.menuMode = this.state !== 'play' && this.state !== 'dying';
+    Input.pollGamepad();
+    if (this.state !== 'controls' && (Input.actionHit('mute') || Input.hit('btn_mute'))) Sfx.toggleMute();
+    Weather.update(dt, this);
 
     switch (this.state) {
       case 'title':
@@ -371,6 +389,12 @@ const G = {
       case 'hangar':
         this.updateHangar();
         break;
+      case 'missions':
+        this.updateMissions();
+        break;
+      case 'workshop':
+        this.updateWorkshop();
+        break;
       case 'briefing':
         this.player.rotor += dt * 40;
         if (this.stateT > 0.5 && Input.confirm()) {
@@ -381,7 +405,7 @@ const G = {
         break;
       case 'paused':
         if (Input.hit('KeyC')) this.openControls();
-        else if (this.stateT > 0.2 && (Input.actionHit('pause') || Input.confirm())) this.setState('play');
+        else if (this.stateT > 0.2 && (Input.actionHit('pause') || Input.hit('btn_pause') || Input.confirm())) this.setState('play');
         break;
       case 'controls':
         this.player.rotor += dt * 40;
@@ -405,7 +429,7 @@ const G = {
         this.updateWorld(dt);
         if (this.stateT > 1.2 && Input.confirm()) {
           Sfx.confirm();
-          if (this.state === 'complete') this.startMission(this.missionIndex + 1);
+          if (this.state === 'complete') this.openWorkshop(this.missionIndex + 1);
           else {
             this.score = this.missionStartScore;
             this.startMission(this.missionIndex);
@@ -494,7 +518,7 @@ const G = {
     }
     if (launch) {
       Sfx.confirm();
-      this.newGame();
+      this.openMissions();
     }
   },
 
@@ -502,12 +526,217 @@ const G = {
     return Object.keys(VEHICLES).find((id) => VEHICLES[id] === this.vehicle);
   },
 
+  callsign() {
+    const n = this.vehicle.name;
+    return n[0] + n.slice(1).toLowerCase();
+  },
+
+  // The clickable box under the latest click or tap, from the boxes the last menu drew.
+  tapHit() {
+    if (!Input.tapped || !this.menuHits || this.stateT < 0.3) return null;
+    const x = Input.tapX, y = Input.tapY;
+    return this.menuHits.find((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) || null;
+  },
+
+  // ------------------------------------------------------------ mission select
+
+  openMissions() {
+    this.menuSel = clamp(Save.data.unlocked - 1, 0, MISSIONS.length - 1);
+    this.menuHits = null;
+    this.setState('missions');
+  },
+
+  updateMissions() {
+    const max = Save.data.unlocked - 1;
+    const move = (d) => {
+      this.menuSel = clamp(this.menuSel + d, 0, max);
+      Sfx.beep();
+    };
+    const launch = (i) => {
+      Sfx.confirm();
+      this.score = 0;
+      this.startMission(i);
+    };
+    if (Input.hit('ArrowUp') || Input.hit('KeyW')) move(-1);
+    if (Input.hit('ArrowDown') || Input.hit('KeyS')) move(1);
+    if (Input.hit('ArrowLeft') || Input.hit('KeyA')) Save.setDifficulty(-1);
+    if (Input.hit('ArrowRight') || Input.hit('KeyD')) Save.setDifficulty(1);
+    if (Input.hit('KeyU')) return this.openWorkshop('missions');
+    if (Input.hit('Escape')) return this.setState('hangar');
+    if (this.stateT > 0.3 && (Input.hit('Space') || Input.hit('Enter'))) return launch(this.menuSel);
+    const hit = this.tapHit();
+    if (!hit) return;
+    if (hit.kind === 'row' && hit.i <= max) {
+      if (hit.i === this.menuSel) launch(hit.i);
+      else this.menuSel = hit.i;
+    } else if (hit.kind === 'diff') Save.setDifficulty(hit.d);
+    else if (hit.kind === 'launch') launch(this.menuSel);
+    else if (hit.kind === 'workshop') this.openWorkshop('missions');
+    else if (hit.kind === 'back') this.setState('hangar');
+  },
+
+  drawMissions(ctx) {
+    this.dim(ctx, 0.72);
+    const w = this.w, h = this.h;
+    const small = w < 600;
+    const pw = Math.min(620, w - 24);
+    const x0 = (w - pw) / 2;
+    const hits = [];
+    let y = Math.max(40, h * 0.07);
+    Hud.text(ctx, 'SELECT MISSION', w / 2, y, { size: small ? 20 : 28, align: 'center', font: TITLE_FONT, weight: '900', color: HUD_AMBER });
+    y += small ? 26 : 34;
+    Hud.text(ctx, `${this.vehicle.name}   FUNDS ${Save.data.funds}`, w / 2, y, { size: 13, align: 'center', color: '#9fb4c0' });
+    y += 26;
+
+    // Difficulty selector.
+    const diff = Save.difficulty();
+    Hud.text(ctx, 'DIFFICULTY', w / 2 - 70, y, { size: 14, align: 'right', color: '#c8d6dc' });
+    const dx = w / 2 + 40;
+    Hud.text(ctx, '◀', dx - 52, y, { size: 16, align: 'center', color: HUD_GREEN });
+    Hud.text(ctx, diff.name, dx, y, { size: 16, align: 'center', color: diff.id === 'hard' ? HUD_RED : diff.id === 'easy' ? '#5ec8ff' : HUD_GREEN });
+    Hud.text(ctx, '▶', dx + 52, y, { size: 16, align: 'center', color: HUD_GREEN });
+    hits.push({ kind: 'diff', d: -1, x: dx - 70, y: y - 20, w: 36, h: 28 }, { kind: 'diff', d: 1, x: dx + 34, y: y - 20, w: 36, h: 28 });
+    y += 18;
+
+    const rowH = clamp((h - y - 110) / MISSIONS.length, 34, 54);
+    MISSIONS.forEach((m, i) => {
+      const ry = y + i * rowH;
+      const locked = i >= Save.data.unlocked;
+      const sel = i === this.menuSel;
+      ctx.fillStyle = sel ? 'rgba(255,192,74,0.12)' : 'rgba(255,255,255,0.03)';
+      ctx.fillRect(x0, ry, pw, rowH - 4);
+      if (sel) {
+        ctx.strokeStyle = HUD_AMBER;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(x0 + 0.5, ry + 0.5, pw - 1, rowH - 5);
+      }
+      const col = locked ? 'rgba(200,214,220,0.35)' : sel ? '#ffffff' : '#c8d6dc';
+      const mid = ry + rowH / 2;
+      Hud.text(ctx, String(i + 1), x0 + 18, mid + 6, { size: small ? 16 : 20, align: 'center', font: TITLE_FONT, weight: '700', color: locked ? col : HUD_AMBER });
+      Hud.text(ctx, m.title, x0 + 40, mid - (small ? 1 : 3), { size: small ? 12 : 15, color: col });
+      Hud.text(ctx, (m.night ? 'NIGHT - ' : '') + THEATRES[m.theatre].label, x0 + 40, mid + (small ? 13 : 15), { size: 11, color: locked ? col : '#9fb4c0' });
+      const best = Save.data.best[i];
+      const right = locked ? 'LOCKED' : best ? `BEST ${best}` : 'NOT CLEARED';
+      Hud.text(ctx, right, x0 + pw - 12, mid + 5, { size: small ? 11 : 13, align: 'right', color: locked ? col : best ? HUD_GREEN : '#9fb4c0' });
+      hits.push({ kind: 'row', i, x: x0, y: ry, w: pw, h: rowH - 4 });
+    });
+
+    // Buttons.
+    const by = y + MISSIONS.length * rowH + 10;
+    const btn = (label, kind, bx, bw, color) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(bx, by, bw, 32);
+      Hud.text(ctx, label, bx + bw / 2, by + 21, { size: 14, align: 'center', color });
+      hits.push({ kind, x: bx, y: by, w: bw, h: 32 });
+    };
+    const bw = Math.min(170, (pw - 20) / 3);
+    btn('BACK', 'back', x0, bw, '#c8d6dc');
+    btn('WORKSHOP', 'workshop', x0 + (pw - bw) / 2, bw, '#5ec8ff');
+    btn('LAUNCH', 'launch', x0 + pw - bw, bw, HUD_GREEN);
+    if (!Input.touchMode) {
+      Hud.text(ctx, '↑↓ MISSION   ←→ DIFFICULTY   SPACE LAUNCH   U WORKSHOP   ESC BACK', w / 2, Math.min(h - 14, by + 58), { size: 12, align: 'center', color: '#9fb4c0' });
+    }
+    this.menuHits = hits;
+  },
+
+  // ------------------------------------------------------------ workshop
+
+  // next: 'missions' to return to mission select, or the mission index to brief next.
+  openWorkshop(next) {
+    this.shop = { sel: 0, next };
+    this.menuHits = null;
+    this.setState('workshop');
+  },
+
+  leaveWorkshop() {
+    Sfx.confirm();
+    if (this.shop.next === 'missions') this.openMissions();
+    else this.startMission(this.shop.next);
+  },
+
+  updateWorkshop() {
+    const rows = UPGRADES.length + 1;
+    const buy = (i) => {
+      if (Save.buy(UPGRADES[i].id)) Sfx.pickup();
+      else Sfx.overheat();
+    };
+    if (Input.hit('ArrowUp') || Input.hit('KeyW')) this.shop.sel = (this.shop.sel + rows - 1) % rows;
+    if (Input.hit('ArrowDown') || Input.hit('KeyS') || Input.hit('Tab')) this.shop.sel = (this.shop.sel + 1) % rows;
+    if (Input.hit('Escape')) return this.leaveWorkshop();
+    if (this.stateT > 0.3 && (Input.hit('Space') || Input.hit('Enter'))) {
+      if (this.shop.sel < UPGRADES.length) buy(this.shop.sel);
+      else return this.leaveWorkshop();
+    }
+    const hit = this.tapHit();
+    if (!hit) return;
+    if (hit.kind === 'upgrade') {
+      this.shop.sel = hit.i;
+      buy(hit.i);
+    } else if (hit.kind === 'continue') this.leaveWorkshop();
+  },
+
+  drawWorkshop(ctx) {
+    this.dim(ctx, 0.75);
+    const w = this.w, h = this.h;
+    const small = w < 600;
+    const pw = Math.min(600, w - 24);
+    const x0 = (w - pw) / 2;
+    const hits = [];
+    let y = Math.max(44, h * 0.1);
+    Hud.text(ctx, 'WORKSHOP', w / 2, y, { size: small ? 22 : 30, align: 'center', font: TITLE_FONT, weight: '900', color: HUD_AMBER });
+    y += small ? 26 : 32;
+    Hud.text(ctx, `FUNDS ${Save.data.funds}`, w / 2, y, { size: 18, align: 'center', color: HUD_GREEN });
+    y += 22;
+    Hud.text(ctx, 'Upgrades fit every aircraft in the hangar.', w / 2, y, { size: 12, align: 'center', color: '#9fb4c0' });
+    y += 22;
+    const rowH = small ? 46 : 54;
+    UPGRADES.forEach((u, i) => {
+      const ry = y + i * rowH;
+      const sel = this.shop.sel === i;
+      const lvl = Save.level(u.id);
+      const cost = Save.nextCost(u.id);
+      const afford = cost !== undefined && Save.data.funds >= cost;
+      ctx.fillStyle = sel ? 'rgba(255,192,74,0.12)' : 'rgba(255,255,255,0.03)';
+      ctx.fillRect(x0, ry, pw, rowH - 6);
+      if (sel) {
+        ctx.strokeStyle = HUD_AMBER;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(x0 + 0.5, ry + 0.5, pw - 1, rowH - 7);
+      }
+      const mid = ry + (rowH - 6) / 2;
+      Hud.text(ctx, u.name, x0 + 14, mid - 3, { size: small ? 13 : 15, color: sel ? '#ffffff' : '#c8d6dc' });
+      Hud.text(ctx, `${u.desc} per level`, x0 + 14, mid + 13, { size: 11, color: '#9fb4c0' });
+      for (let k = 0; k < u.costs.length; k++) {
+        ctx.fillStyle = k < lvl ? HUD_GREEN : 'rgba(255,255,255,0.15)';
+        ctx.fillRect(x0 + pw * 0.55 + k * 16, mid - 6, 11, 12);
+      }
+      const label = cost === undefined ? 'MAX' : `${cost}`;
+      Hud.text(ctx, label, x0 + pw - 14, mid + 5, { size: 14, align: 'right', color: cost === undefined ? HUD_GREEN : afford ? HUD_AMBER : HUD_RED });
+      hits.push({ kind: 'upgrade', i, x: x0, y: ry, w: pw, h: rowH - 6 });
+    });
+    const by = y + UPGRADES.length * rowH + 8;
+    const cs = this.shop.sel === UPGRADES.length;
+    ctx.strokeStyle = cs ? HUD_AMBER : HUD_GREEN;
+    ctx.lineWidth = cs ? 2 : 1.5;
+    ctx.strokeRect(x0 + pw / 2 - 110, by, 220, 34);
+    const nextLabel = this.shop.next === 'missions' ? 'DONE' : 'CONTINUE TO BRIEFING';
+    Hud.text(ctx, nextLabel, w / 2, by + 22, { size: 14, align: 'center', color: cs ? HUD_AMBER : HUD_GREEN });
+    hits.push({ kind: 'continue', x: x0 + pw / 2 - 110, y: by, w: 220, h: 34 });
+    if (!Input.touchMode) {
+      Hud.text(ctx, '↑↓ SELECT   SPACE BUY   ESC CONTINUE', w / 2, Math.min(h - 14, by + 60), { size: 12, align: 'center', color: '#9fb4c0' });
+    }
+    this.menuHits = hits;
+  },
+
   checkMission() {
     const s = this.mission.status(this);
     if (s === 'won') {
       this.result = 'won';
-      this.score += 1000 * (this.missionIndex + 1);
+      this.score += 1000 * ((this.missionIndex % MISSIONS.length) + 1);
       this.saveBest();
+      this.lastEarned = this.score - this.missionStartScore;
+      Save.cleared(this.missionIndex, this.lastEarned);
       this.banner('MISSION COMPLETE', HUD_AMBER);
       this.setState('complete');
     } else if (s === 'lost') {
@@ -738,6 +967,8 @@ const G = {
     for (const f of this.flares) if (inView(f)) f.draw(ctx);
     ctx.globalCompositeOperation = 'source-over';
 
+    if (this.mission.night && !['title', 'hangar', 'missions'].includes(this.state)) Weather.drawNight(ctx, this);
+
     for (const f of this.floaters) {
       ctx.globalAlpha = clamp(f.t, 0, 1);
       Hud.text(ctx, f.text, f.x, f.y, { size: 13, align: 'center', color: '#fff3c0' });
@@ -750,9 +981,12 @@ const G = {
 
     // Screen space
     ctx.setTransform(d, 0, 0, d, 0, 0);
+    Weather.draw(ctx, this.w, this.h);
     switch (this.state) {
       case 'title': this.drawTitle(ctx); break;
       case 'hangar': this.drawHangar(ctx); break;
+      case 'missions': this.drawMissions(ctx); break;
+      case 'workshop': this.drawWorkshop(ctx); break;
       case 'controls':
         if (this.menu.from === 'title') this.dim(ctx, 0.3);
         this.drawControls(ctx);
@@ -850,7 +1084,7 @@ const G = {
     const ts = small ? 32 : 64;
     Hud.text(ctx, 'CHOPPER', w / 2, h * 0.3, { size: ts, align: 'center', font: TITLE_FONT, weight: '900', color: '#e9ecef' });
     Hud.text(ctx, 'GUNNER', w / 2, h * 0.3 + ts * 1.05, { size: ts, align: 'center', font: TITLE_FONT, weight: '900', color: HUD_AMBER });
-    Hud.text(ctx, 'A STORMWOLF MISSION', w / 2, h * 0.3 + ts * 1.05 + 34, { size: small ? 13 : 16, align: 'center', color: '#9fb4c0' });
+    Hud.text(ctx, 'AN OVERWATCH CAMPAIGN', w / 2, h * 0.3 + ts * 1.05 + 34, { size: small ? 13 : 16, align: 'center', color: '#9fb4c0' });
 
     const lines = Input.touchMode || 'ontouchstart' in window && w < 900
       ? ['LEFT THUMB  move', 'RIGHT THUMB  aim + fire', 'MSL missiles   FLR flares   TRB turbo', 'Hover over the base pad to repair & rearm']
@@ -957,8 +1191,8 @@ const G = {
     });
 
     const prompt = Input.touchMode
-      ? 'TAP THE SIDES TO CHOOSE - TAP THE MIDDLE TO LAUNCH'
-      : '\u2190 \u2192 CHOOSE    SPACE / CLICK LAUNCH    ESC BACK';
+      ? 'TAP THE SIDES TO CHOOSE - TAP THE MIDDLE TO CONTINUE'
+      : '\u2190 \u2192 CHOOSE    SPACE / CLICK CONTINUE    ESC BACK';
     if (Math.floor(this.time * 2) % 2 === 0) {
       Hud.text(ctx, prompt, w / 2, Math.min(h - 24, y + (small ? 34 : 44)), { size: small ? 12 : 16, align: 'center', color: HUD_GREEN });
     }
@@ -979,7 +1213,7 @@ const G = {
     // Typewriter reveal
     let chars = Math.floor(this.stateT * 70);
     ctx.font = `${small ? 13 : 16}px ${FONT}`;
-    for (const line of this.mission.brief) {
+    for (const line of this.mission.brief.map((l) => l.replace('{callsign}', this.callsign()))) {
       const wrapped = this.wrap(ctx, line, pw);
       for (const wl of wrapped) {
         if (chars <= 0) break;
@@ -1073,9 +1307,9 @@ const G = {
   drawComplete(ctx) {
     if (this.stateT < 1) return;
     const last = (this.missionIndex + 1) % MISSIONS.length === 0;
-    const lines = [`Score ${this.score}`, `Kills this mission: ${this.kills}`, ''];
+    const lines = [`Score ${this.score}`, `Kills this mission: ${this.kills}`, `Earned ${this.lastEarned}   Funds ${Save.data.funds}`, ''];
     if (last) lines.unshift('The militia air force is finished. Overwatch has a new tour for you.');
-    lines.push('PRESS SPACE / TAP FOR NEXT BRIEFING');
+    lines.push('PRESS SPACE / TAP FOR THE WORKSHOP');
     this.drawCenterPanel(ctx, last ? 'CAMPAIGN COMPLETE' : 'MISSION COMPLETE', lines);
   },
 
