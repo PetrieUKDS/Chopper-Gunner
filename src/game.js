@@ -1,6 +1,7 @@
 'use strict';
 
 const VEHICLE_KEY = 'chopperGunner.vehicle';
+const AUTO_AIM_RANGE = 620; // a little inside the chain guns' reach
 
 const G = {
   canvas: null,
@@ -31,6 +32,7 @@ const G = {
   allowedEscapes: 0,
   checkpoint: null,
   lockTarget: null,
+  touchToggleBox: null, // title-screen button for switching touch controls
   missileWarning: false,
   warnBeepT: 0,
   reinforceT: 0,
@@ -249,6 +251,17 @@ const G = {
     return best;
   },
 
+  // Nearest live enemy within gun range, for one-thumb touch controls.
+  autoTarget(p) {
+    let best = null, bd = AUTO_AIM_RANGE * AUTO_AIM_RANGE;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const d = dist2(e.x, e.y, p.x, p.y);
+      if (d < bd) { bd = d; best = e; }
+    }
+    return best;
+  },
+
   computeLock(c) {
     let best = null, bd = 240 * 240;
     for (const e of this.enemies) {
@@ -304,7 +317,23 @@ const G = {
     c.flare = Input.actionHit('flare') || Input.hit('btn_flare');
     c.turbo = Input.action('turbo') || Input.buttons.turbo !== undefined;
     c.missile = Input.mouse.right || Input.action('missile') || Input.actionHit('missile') || Input.buttons.missile !== undefined;
-    if (Input.touchMode) {
+    if (Input.touchMode && Input.touchStyle === 'easy') {
+      // One thumb flies; the guns pick the nearest enemy in range, turn onto it and fire once lined up.
+      const m = Input.stick('move');
+      c.mx += m.x;
+      c.my += m.y;
+      const t = this.autoTarget(p);
+      if (t) {
+        c.aimX = t.x;
+        c.aimY = t.y;
+        c.assist = true;
+        const off = Math.abs(angDiff(p.angle, Math.atan2(t.y - p.y, t.x - p.x)));
+        c.fire = off < 0.3 && p.heat < 88; // ease off before the guns overheat
+      } else if (m.mag > 0.2) {
+        c.aimX = p.x + m.x / m.mag * 300; // nothing to shoot: face the way you're flying
+        c.aimY = p.y + m.y / m.mag * 300;
+      }
+    } else if (Input.touchMode) {
       const m = Input.stick('move');
       c.mx += m.x;
       c.my += m.y;
@@ -381,6 +410,12 @@ const G = {
         this.player.rotor += dt * 40;
         if (Input.hit('KeyC')) {
           this.openControls();
+          break;
+        }
+        const tb = this.touchToggleBox;
+        if (tb && Input.tapped && this.stateT > 0.3 && Input.tapX >= tb.x && Input.tapX <= tb.x + tb.w && Input.tapY >= tb.y && Input.tapY <= tb.y + tb.h) {
+          Input.toggleTouchStyle();
+          Sfx.beep();
           break;
         }
         if (this.stateT > 0.3 && Input.confirm()) {
@@ -1088,8 +1123,11 @@ const G = {
     Hud.text(ctx, 'GUNNER', w / 2, h * 0.3 + ts * 1.05, { size: ts, align: 'center', font: TITLE_FONT, weight: '900', color: HUD_AMBER });
     Hud.text(ctx, 'AN OVERWATCH CAMPAIGN', w / 2, h * 0.3 + ts * 1.05 + 34, { size: small ? 13 : 16, align: 'center', color: '#9fb4c0' });
 
-    const lines = Input.touchMode || 'ontouchstart' in window && w < 900
-      ? ['LEFT THUMB  move', 'RIGHT THUMB  aim + fire', 'MSL missiles   FLR flares   TRB turbo', 'Hover over the base pad to repair & rearm']
+    const touch = Input.touchMode || 'ontouchstart' in window && w < 900;
+    const lines = touch
+      ? (Input.touchStyle === 'easy'
+        ? ['THUMB ANYWHERE  fly', 'Guns aim + fire for you', 'MSL missiles   FLR flares   TRB turbo', 'Hover over the base pad to repair & rearm']
+        : ['LEFT THUMB  move', 'RIGHT THUMB  aim + fire', 'MSL missiles   FLR flares   TRB turbo', 'Hover over the base pad to repair & rearm'])
       : [
         `${['up', 'left', 'down', 'right'].map((a) => Input.bindLabel(a)).join('')}  fly     ${Input.bindLabel('turnLeft')} ${Input.bindLabel('turnRight')}  turn (or aim with MOUSE)`,
         `${Input.bindLabel('fire')} / LEFT CLICK  chain guns`,
@@ -1102,6 +1140,24 @@ const G = {
     for (const l of lines) {
       Hud.text(ctx, l, w / 2, y, { size: small ? 12 : 15, align: 'center', color: '#c8d6dc' });
       y += small ? 20 : 24;
+    }
+    // Touch players switch between one-thumb and twin-stick with this button (top right, clear of the title).
+    this.touchToggleBox = null;
+    if (touch) {
+      const label = Input.touchStyle === 'easy' ? 'CONTROLS: ONE THUMB' : 'CONTROLS: TWIN STICK';
+      ctx.font = `13px ${FONT}`;
+      const bw = ctx.measureText(label).width + 64, bh = 40, bx = w - bw - 12, by = 12;
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.strokeStyle = 'rgba(125,255,176,0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, bw, bh, 8);
+      ctx.fill();
+      ctx.stroke();
+      Hud.text(ctx, label, bx + 14, by + 18, { size: 13, color: HUD_GREEN, shadow: false });
+      Hud.text(ctx, 'tap to change', bx + 14, by + 33, { size: 11, color: '#9fb4c0', shadow: false });
+      Hud.text(ctx, '⇄', bx + bw - 22, by + 26, { size: 18, align: 'center', color: HUD_GREEN, shadow: false });
+      this.touchToggleBox = { x: bx, y: by, w: bw, h: bh };
     }
     if (Math.floor(this.time * 2) % 2 === 0) {
       Hud.text(ctx, 'PRESS SPACE / CLICK / TAP TO START', w / 2, h * 0.9, { size: small ? 14 : 18, align: 'center', color: HUD_GREEN });
