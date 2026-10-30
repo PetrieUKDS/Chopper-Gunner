@@ -122,8 +122,9 @@ const Input = {
         this.pressed['btn_' + b.id] = true;
         return;
       }
-      // One-thumb: a touch anywhere that isn't a button flies. Twin-stick: left half flies, right half aims.
-      const side = this.touchStyle === 'easy' || x < window.innerWidth / 2 ? 'move' : 'aim';
+      // One-thumb: the first touch anywhere flies and a second one aims by hand.
+      // Twin-stick: left half flies, right half aims.
+      const side = this.touchStyle === 'easy' ? (this.sticks.move ? 'aim' : 'move') : x < window.innerWidth / 2 ? 'move' : 'aim';
       if (!this.sticks[side]) this.sticks[side] = { id: e.pointerId, ox: x, oy: y, x, y };
     } else {
       this.touchMode = false;

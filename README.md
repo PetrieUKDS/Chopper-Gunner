@@ -57,7 +57,7 @@ The mouse also works for aiming and firing.
 
 ### Phones and tablets
 
-Touch controls start in **one-thumb** mode: put a thumb down anywhere to fly, and the chain guns turn onto the nearest enemy in range and fire by themselves, easing off before they overheat. Your other thumb is free for the missile, flare and turbo buttons in the bottom-right corner.
+Touch controls start in **one-thumb** mode: put a thumb down anywhere to fly, and the chain guns lock onto the nearest enemy on screen and fire by themselves once it's lined up and in reach, easing off before they overheat. Your other thumb is free for the missile, flare and turbo buttons in the bottom-right corner, or put it down anywhere else to aim and fire by hand.
 
 Prefer full control? Tap **CONTROLS** in the top right of the title screen to switch to **twin-stick**: the left half of the screen moves, the right half aims and fires. The choice is saved in the browser.
 
