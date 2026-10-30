@@ -172,6 +172,8 @@ const G = {
   setState(s) {
     this.state = s;
     this.stateT = 0;
+    // The crosshair stands in for the mouse pointer only while flying.
+    this.canvas.style.cursor = s === 'play' || s === 'dying' ? 'none' : 'default';
   },
 
   playerDied() {
