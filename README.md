@@ -53,7 +53,13 @@ Your campaign progress, funds, upgrades, difficulty, best scores, key bindings a
 | Mute | M |
 | Rebind keys | C (on the title screen or while paused) |
 
-The mouse also works for aiming and firing. On phones and tablets you get twin-stick touch controls: the left half of the screen moves, the right half aims and fires, and there are on-screen buttons for missiles, flares, turbo and pause.
+The mouse also works for aiming and firing.
+
+### Phones and tablets
+
+Touch controls start in **one-thumb** mode: put a thumb down anywhere to fly, and the chain guns turn onto the nearest enemy in range and fire by themselves, easing off before they overheat. Your other thumb is free for the missile, flare and turbo buttons in the bottom-right corner.
+
+Prefer full control? Tap **CONTROLS** in the top right of the title screen to switch to **twin-stick**: the left half of the screen moves, the right half aims and fires. The choice is saved in the browser.
 
 ### Gamepad
 
