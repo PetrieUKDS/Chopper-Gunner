@@ -32,7 +32,6 @@ const DEFAULT_BINDS = {
 };
 
 const BINDS_KEY = 'chopperGunner.binds';
-const TOUCH_KEY = 'chopperGunner.touchStyle';
 
 function keyName(code) {
   if (!code) return '-';
@@ -50,8 +49,7 @@ function keyName(code) {
   return code.toUpperCase();
 }
 
-// Keyboard + mouse, plus touch controls for phones and tablets: one-thumb (fly, and the guns
-// aim and fire themselves) by default, or classic twin-stick.
+// Keyboard + mouse, plus twin-stick touch controls for phones and tablets.
 const Input = {
   binds: null,
   capture: null, // when set, the next key press is handed to this callback
@@ -60,7 +58,6 @@ const Input = {
   pressed: {},
   mouse: { x: 0, y: 0, left: false, right: false },
   touchMode: false,
-  touchStyle: 'easy', // 'easy' = one thumb, 'twin' = twin-stick
   sticks: { move: null, aim: null },
   buttons: {},
   tapped: false,
@@ -72,10 +69,6 @@ const Input = {
 
   init(canvas) {
     this.loadBinds();
-    try {
-      if (localStorage.getItem(TOUCH_KEY) === 'twin') this.touchStyle = 'twin';
-    } catch (e) { /* storage unavailable */ }
-    if (this.layoutW) this.layoutButtons(this.layoutW, this.layoutH); // the first layout ran before the setting loaded
     window.addEventListener('keydown', (e) => {
       if (this.capture) {
         e.preventDefault();
@@ -122,9 +115,7 @@ const Input = {
         this.pressed['btn_' + b.id] = true;
         return;
       }
-      // One-thumb: the first touch anywhere flies and a second one aims by hand.
-      // Twin-stick: left half flies, right half aims.
-      const side = this.touchStyle === 'easy' ? (this.sticks.move ? 'aim' : 'move') : x < window.innerWidth / 2 ? 'move' : 'aim';
+      const side = x < window.innerWidth / 2 ? 'move' : 'aim';
       if (!this.sticks[side]) this.sticks[side] = { id: e.pointerId, ox: x, oy: y, x, y };
     } else {
       this.touchMode = false;
@@ -180,30 +171,12 @@ const Input = {
   },
 
   layoutButtons(w, h) {
-    this.layoutW = w;
-    this.layoutH = h;
-    // One-thumb puts the buttons in an arc in the bottom-right corner, where the right thumb rests.
-    // Twin-stick keeps them higher up, clear of the aim stick.
-    this.btnLayout = this.touchStyle === 'easy' ? [
-      { id: 'missile', x: w - 82, y: h - 92, r: 44, label: 'MSL' },
-      { id: 'flare', x: w - 188, y: h - 124, r: 36, label: 'FLR' },
-      { id: 'turbo', x: w - 66, y: Math.max(h - 204, 196), r: 36, label: 'TRB' }, // stays below the radar on a sideways phone
-      { id: 'pause', x: w / 2, y: h - 30, r: 20, label: 'II' },
-    ] : [
-      { id: 'missile', x: w - 70, y: h - 212, r: 38, label: 'MSL' },
-      { id: 'flare', x: w - 162, y: h - 252, r: 32, label: 'FLR' },
-      { id: 'turbo', x: w - 70, y: h - 306, r: 32, label: 'TRB' },
-      { id: 'pause', x: w / 2, y: h - 30, r: 20, label: 'II' },
+    this.btnLayout = [
+      { id: 'missile', x: w - 66, y: h - 200, r: 32, label: 'MSL' },
+      { id: 'flare', x: w - 146, y: h - 236, r: 28, label: 'FLR' },
+      { id: 'turbo', x: w - 66, y: h - 282, r: 28, label: 'TRB' },
+      { id: 'pause', x: w / 2, y: h - 30, r: 18, label: 'II' },
     ];
-  },
-
-  toggleTouchStyle() {
-    this.touchStyle = this.touchStyle === 'easy' ? 'twin' : 'easy';
-    try {
-      localStorage.setItem(TOUCH_KEY, this.touchStyle);
-    } catch (e) { /* storage unavailable */ }
-    this.sticks.move = this.sticks.aim = null;
-    if (this.layoutW) this.layoutButtons(this.layoutW, this.layoutH);
   },
 
   // Standard-mapping gamepad: left stick flies, right stick aims, RT fires, LT missiles,
