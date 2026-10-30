@@ -1,7 +1,7 @@
 'use strict';
 
 const VEHICLE_KEY = 'chopperGunner.vehicle';
-const AUTO_AIM_RANGE = 620; // a little inside the chain guns' reach
+const GUN_REACH = 700; // how far chain-gun rounds travel before they burn out (980 px/s for 0.7 s)
 
 const G = {
   canvas: null,
@@ -251,13 +251,15 @@ const G = {
     return best;
   },
 
-  // Nearest live enemy within gun range, for one-thumb touch controls.
+  // Nearest live enemy the player can see (on screen, or within gun reach), for one-thumb touch controls.
   autoTarget(p) {
-    let best = null, bd = AUTO_AIM_RANGE * AUTO_AIM_RANGE;
+    const hw = this.w / 2 / this.zoom + 40, hh = this.h / 2 / this.zoom + 40;
+    let best = null, bd = Infinity;
     for (const e of this.enemies) {
       if (e.dead) continue;
       const d = dist2(e.x, e.y, p.x, p.y);
-      if (d < bd) { bd = d; best = e; }
+      const seen = Math.abs(e.x - this.cam.x) < hw && Math.abs(e.y - this.cam.y) < hh;
+      if ((seen || d < GUN_REACH * GUN_REACH) && d < bd) { bd = d; best = e; }
     }
     return best;
   },
@@ -318,17 +320,25 @@ const G = {
     c.turbo = Input.action('turbo') || Input.buttons.turbo !== undefined;
     c.missile = Input.mouse.right || Input.action('missile') || Input.actionHit('missile') || Input.buttons.missile !== undefined;
     if (Input.touchMode && Input.touchStyle === 'easy') {
-      // One thumb flies; the guns pick the nearest enemy in range, turn onto it and fire once lined up.
+      // One thumb flies; the guns lock onto the nearest enemy on screen and fire once it's lined up
+      // and within reach. A second thumb takes over aiming and firing by hand.
       const m = Input.stick('move');
       c.mx += m.x;
       c.my += m.y;
+      const a = Input.stick('aim');
       const t = this.autoTarget(p);
-      if (t) {
+      if (a.mag > 0.2) {
+        const ang = Math.atan2(a.y, a.x);
+        c.aimX = p.x + Math.cos(ang) * 300;
+        c.aimY = p.y + Math.sin(ang) * 300;
+        c.fire = a.mag > 0.45;
+        c.assist = true;
+      } else if (t) {
         c.aimX = t.x;
         c.aimY = t.y;
         c.assist = true;
         const off = Math.abs(angDiff(p.angle, Math.atan2(t.y - p.y, t.x - p.x)));
-        c.fire = off < 0.3 && p.heat < 88; // ease off before the guns overheat
+        c.fire = off < 0.3 && dist(t.x, t.y, p.x, p.y) < GUN_REACH && p.heat < 88; // ease off before the guns overheat
       } else if (m.mag > 0.2) {
         c.aimX = p.x + m.x / m.mag * 300; // nothing to shoot: face the way you're flying
         c.aimY = p.y + m.y / m.mag * 300;

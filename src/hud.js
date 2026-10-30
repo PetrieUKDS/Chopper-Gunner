@@ -229,6 +229,7 @@ const Hud = {
     const hint = { size: 12, align: 'center', color: 'rgba(255,255,255,0.35)', shadow: false };
     if (Input.touchStyle === 'easy') {
       if (!Input.sticks.move) this.text(ctx, 'THUMB ANYWHERE TO FLY  ·  GUNS AUTO-AIM', g.w / 2, g.h - 64, hint);
+      else if (!Input.sticks.aim) this.text(ctx, 'SECOND THUMB TO AIM BY HAND', g.w / 2, g.h - 64, hint);
     } else {
       if (!Input.sticks.move) this.text(ctx, 'MOVE', 70, g.h - 60, hint);
       if (!Input.sticks.aim) this.text(ctx, 'AIM + FIRE', g.w - 160, g.h - 60, hint);
