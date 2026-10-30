@@ -10,10 +10,13 @@ const PEAKS = 0.82;
 // Each mission is fought in a theatre: its own island (map seed), palette, vegetation,
 // and the camouflage the enemy paints its vehicles in.
 // dryness shifts how much of the land is dry ground versus lush ground.
+// weather: screen-space effect from weather.js. landmarks: set pieces scattered over the land.
 // trees: kind of vegetation, how dense, and a bias toward planting it in drier ground.
 const THEATRES = {
   temperate: {
     label: 'CENTRAL VALLEYS',
+    weather: 'none',
+    landmarks: ['farm', 'farm', 'ruins'],
     seed: 1984,
     seaShallow: [52, 122, 146], seaDeep: [12, 38, 74],
     shore: [214, 197, 148], dry: [202, 170, 108], wet: [88, 118, 56],
@@ -27,6 +30,8 @@ const THEATRES = {
   },
   desert: {
     label: 'SOUTHERN DESERT',
+    weather: 'sand',
+    landmarks: ['ruins', 'tents'],
     seed: 7,
     seaShallow: [64, 150, 160], seaDeep: [14, 56, 92],
     shore: [228, 210, 160], dry: [222, 192, 134], wet: [168, 158, 96],
@@ -40,6 +45,8 @@ const THEATRES = {
   },
   arctic: {
     label: 'NORTHERN TUNDRA',
+    weather: 'snow',
+    landmarks: ['lake', 'lake', 'hut'],
     seed: 4242,
     seaShallow: [96, 150, 178], seaDeep: [18, 48, 80], ice: true,
     shore: [226, 234, 240], dry: [236, 240, 245], wet: [192, 204, 202],
@@ -53,6 +60,8 @@ const THEATRES = {
   },
   jungle: {
     label: 'EASTERN JUNGLE',
+    weather: 'rain',
+    landmarks: ['temple'],
     seed: 31337,
     seaShallow: [48, 116, 104], seaDeep: [10, 44, 52],
     shore: [126, 108, 72], dry: [104, 128, 58], wet: [44, 90, 38],
@@ -66,6 +75,8 @@ const THEATRES = {
   },
   ash: {
     label: 'VOLCANIC OIL FIELDS',
+    weather: 'ash',
+    landmarks: ['pumpjack', 'pumpjack', 'oilpool'],
     seed: 666,
     seaShallow: [52, 60, 66], seaDeep: [14, 16, 22],
     shore: [80, 74, 70], dry: [98, 90, 84], wet: [76, 78, 64],
@@ -79,6 +90,8 @@ const THEATRES = {
   },
   canyon: {
     label: 'RED CANYONS',
+    weather: 'dust',
+    landmarks: ['mesa', 'mesa', 'ruins'],
     seed: 2077,
     seaShallow: [70, 140, 150], seaDeep: [16, 54, 84],
     shore: [214, 170, 120], dry: [196, 132, 84], wet: [150, 122, 72],
@@ -267,9 +280,191 @@ function distToSegment(px, py, ax, ay, bx, by) {
   return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
 }
 
+// Set pieces seen from above, drawn around the origin (roughly 50-90px across).
+function drawLandmarkShape(g, kind) {
+  const shadow = (fn) => {
+    g.save();
+    g.translate(4, 5);
+    g.fillStyle = 'rgba(0,0,0,0.25)';
+    fn();
+    g.restore();
+  };
+  if (kind === 'farm') {
+    // Ploughed fields with a barn.
+    const cols = ['#8a7a45', '#a39552', '#6f8040', '#94874c'];
+    for (let i = 0; i < 4; i++) {
+      const fx = (i % 2) * 44 - 44, fy = Math.floor(i / 2) * 36 - 36;
+      g.fillStyle = cols[i];
+      g.fillRect(fx, fy, 42, 34);
+      g.strokeStyle = 'rgba(0,0,0,0.15)';
+      g.lineWidth = 1;
+      g.beginPath();
+      for (let k = 4; k < 42; k += 5) {
+        g.moveTo(fx + k, fy + 2); g.lineTo(fx + k, fy + 32);
+      }
+      g.stroke();
+    }
+    shadow(() => g.fillRect(-12, -9, 24, 18));
+    g.fillStyle = '#7a3b2a';
+    g.fillRect(-12, -9, 24, 18);
+    g.fillStyle = '#9a4c36';
+    g.fillRect(-12, -9, 24, 9);
+  } else if (kind === 'ruins') {
+    // Broken stone walls around a courtyard.
+    g.fillStyle = 'rgba(0,0,0,0.12)';
+    g.fillRect(-30, -24, 60, 48);
+    g.strokeStyle = '#b8a888';
+    g.lineWidth = 5;
+    g.lineCap = 'square';
+    g.beginPath();
+    g.moveTo(-30, -6); g.lineTo(-30, -24); g.lineTo(8, -24);
+    g.moveTo(20, -24); g.lineTo(30, -24); g.lineTo(30, 10);
+    g.moveTo(30, 24); g.lineTo(-10, 24);
+    g.moveTo(-30, 10); g.lineTo(-30, 24);
+    g.moveTo(-8, -24); g.lineTo(-8, 0);
+    g.stroke();
+    g.fillStyle = '#9c8e70';
+    for (const [rx, ry] of [[14, -14], [-18, 14], [4, 8]]) g.fillRect(rx, ry, 5, 4);
+  } else if (kind === 'tents') {
+    // Nomad camp around a fire.
+    for (const [tx, ty] of [[-18, -10], [14, -14], [0, 16]]) {
+      shadow(() => {
+        g.beginPath();
+        g.moveTo(tx - 12, ty + 9); g.lineTo(tx, ty - 9); g.lineTo(tx + 12, ty + 9);
+        g.fill();
+      });
+      g.fillStyle = '#e8dcc0';
+      g.beginPath();
+      g.moveTo(tx - 12, ty + 9); g.lineTo(tx, ty - 9); g.lineTo(tx, ty + 9);
+      g.fill();
+      g.fillStyle = '#bfae88';
+      g.beginPath();
+      g.moveTo(tx, ty - 9); g.lineTo(tx + 12, ty + 9); g.lineTo(tx, ty + 9);
+      g.fill();
+    }
+    g.fillStyle = '#3a2a1a';
+    g.beginPath();
+    g.arc(0, 0, 3, 0, TAU);
+    g.fill();
+  } else if (kind === 'lake') {
+    // Frozen lake with cracks in the ice.
+    g.fillStyle = '#b8d4e4';
+    g.beginPath();
+    g.ellipse(0, 0, 46, 30, 0, 0, TAU);
+    g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.45)';
+    g.beginPath();
+    g.ellipse(-10, -8, 26, 12, -0.3, 0, TAU);
+    g.fill();
+    g.strokeStyle = 'rgba(80,120,150,0.5)';
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(-30, 6); g.lineTo(-10, 2); g.lineTo(4, 12); g.lineTo(26, 4);
+    g.moveTo(-10, 2); g.lineTo(-4, -16);
+    g.moveTo(4, 12); g.lineTo(10, 24);
+    g.stroke();
+  } else if (kind === 'hut') {
+    // Research huts with snowy roofs and a radio mast.
+    for (const [hx, hy] of [[-14, -6], [14, 4]]) {
+      shadow(() => g.fillRect(hx - 10, hy - 7, 20, 14));
+      g.fillStyle = '#c0392b';
+      g.fillRect(hx - 10, hy - 7, 20, 14);
+      g.fillStyle = '#f2f5f8';
+      g.fillRect(hx - 9, hy - 6, 18, 6);
+    }
+    g.strokeStyle = '#4b5258';
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(0, 18); g.lineTo(0, 30);
+    g.moveTo(-6, 24); g.lineTo(6, 24);
+    g.stroke();
+  } else if (kind === 'temple') {
+    // Stepped stone temple swallowed by moss.
+    shadow(() => g.fillRect(-30, -30, 60, 60));
+    const steps = ['#7b7a62', '#8b8a70', '#9b9a7e', '#aaa98c'];
+    steps.forEach((col, i) => {
+      const r = 30 - i * 7;
+      g.fillStyle = col;
+      g.fillRect(-r, -r, r * 2, r * 2);
+    });
+    g.fillStyle = '#2a2a20';
+    g.fillRect(-4, -4, 8, 8);
+    g.fillStyle = 'rgba(60,110,40,0.55)';
+    for (const [mx, my, mr] of [[-22, 18, 8], [20, -20, 7], [16, 22, 6], [-24, -16, 5]]) {
+      g.beginPath();
+      g.arc(mx, my, mr, 0, TAU);
+      g.fill();
+    }
+  } else if (kind === 'pumpjack') {
+    // Oil pumpjack on a pad, with a pipe running off.
+    g.fillStyle = '#5a5550';
+    g.fillRect(-20, -12, 40, 24);
+    g.strokeStyle = '#2e2b29';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(20, 0); g.lineTo(46, 4);
+    g.stroke();
+    shadow(() => g.fillRect(-16, -2.5, 30, 5));
+    g.fillStyle = '#c0782e';
+    g.fillRect(-16, -2.5, 30, 5);
+    g.beginPath();
+    g.moveTo(14, -6); g.quadraticCurveTo(22, 0, 14, 6);
+    g.fill();
+    g.fillStyle = '#2e2b29';
+    g.fillRect(-4, -6, 6, 12);
+    g.fillRect(-18, -5, 6, 10);
+  } else if (kind === 'oilpool') {
+    // Glossy pool of crude with a rainbow sheen.
+    g.fillStyle = '#0d0c0c';
+    g.beginPath();
+    g.ellipse(0, 0, 34, 20, 0, 0, TAU);
+    g.ellipse(24, 10, 14, 9, 0.4, 0, TAU);
+    g.fill();
+    g.fillStyle = 'rgba(120,90,160,0.25)';
+    g.beginPath();
+    g.ellipse(-8, -6, 14, 5, -0.2, 0, TAU);
+    g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.2)';
+    g.beginPath();
+    g.ellipse(-12, -8, 6, 2, -0.2, 0, TAU);
+    g.fill();
+  } else if (kind === 'mesa') {
+    // Flat-topped rock outcrop with banded sides.
+    shadow(() => {
+      g.beginPath();
+      g.ellipse(0, 0, 42, 30, 0, 0, TAU);
+      g.fill();
+    });
+    const bands = ['#7e4a30', '#94583a', '#a96846', '#bd7a54'];
+    bands.forEach((col, i) => {
+      g.fillStyle = col;
+      g.beginPath();
+      g.ellipse(-i * 1.5, -i * 1.5, 42 - i * 5, 30 - i * 4, 0, 0, TAU);
+      g.fill();
+    });
+  } else if (kind === 'wreck') {
+    // Rusting hulk half-sunk offshore.
+    g.fillStyle = 'rgba(200,220,230,0.25)';
+    g.beginPath();
+    g.ellipse(0, 0, 46, 16, 0, 0, TAU);
+    g.fill();
+    g.fillStyle = '#5a3a28';
+    g.beginPath();
+    g.moveTo(38, 0); g.lineTo(24, -10); g.lineTo(-36, -9); g.lineTo(-36, 9); g.lineTo(24, 10);
+    g.closePath();
+    g.fill();
+    g.fillStyle = '#7a5038';
+    g.fillRect(-20, -6, 22, 12);
+    g.fillStyle = '#3a2a20';
+    g.fillRect(-30, -4, 6, 8);
+    g.fillRect(10, -5, 6, 10);
+  }
+}
+
 class Terrain {
   constructor() {
     this.chunks = new Map();
+    this.landmarks = new Map();
     this.roads = [];
     this.decals = [];
     this.frame = 0;
@@ -281,6 +476,7 @@ class Terrain {
 
   reset() {
     this.chunks.clear();
+    this.landmarks.clear();
     this.roads = [];
     this.decals = [];
   }
@@ -355,6 +551,9 @@ class Terrain {
     this.drawRoads(g);
     // Features from neighbouring chunks too, so trees straddling a seam are not cut in half.
     for (let oy = -1; oy <= 1; oy++) {
+      for (let ox = -1; ox <= 1; ox++) this.drawLandmark(g, cx + ox, cy + oy);
+    }
+    for (let oy = -1; oy <= 1; oy++) {
       for (let ox = -1; ox <= 1; ox++) this.drawFeatures(g, cx + ox, cy + oy);
     }
     for (const dc of this.decals) {
@@ -385,6 +584,45 @@ class Terrain {
     }
   }
 
+  // At most one landmark per chunk, placed deterministically so neighbouring chunks agree.
+  landmarkAt(cx, cy) {
+    const key = cx + ',' + cy;
+    if (!this.landmarks.has(key)) this.landmarks.set(key, this.placeLandmark(cx, cy));
+    return this.landmarks.get(key);
+  }
+
+  placeLandmark(cx, cy) {
+    const rng = mulberry32((cx * 92837111) ^ (cy * 689287499) ^ THEATRE.seed ^ 0x1a2b);
+    const roll = rng(), x = cx * CHUNK + 50 + rng() * (CHUNK - 100), y = cy * CHUNK + 50 + rng() * (CHUNK - 100);
+    const rot = rng() * TAU, pickR = rng();
+    const h = heightAt(x, y);
+    if (roll < 0.05 && h < SEA_LEVEL - 0.05) return { kind: 'wreck', x, y, rot, r: 40 };
+    if (roll > 0.13 || h < SHORE + 0.02 || h > HILLS - 0.02) return null;
+    if (this.roads.length && this.nearRoad(x, y, 80)) return null;
+    const kinds = THEATRE.landmarks;
+    return { kind: kinds[Math.floor(pickR * kinds.length)], x, y, rot, r: 55 };
+  }
+
+  inLandmark(x, y, cx, cy) {
+    for (let oy = -1; oy <= 1; oy++) {
+      for (let ox = -1; ox <= 1; ox++) {
+        const lm = this.landmarkAt(cx + ox, cy + oy);
+        if (lm && lm.kind !== 'wreck' && dist2(x, y, lm.x, lm.y) < lm.r * lm.r) return true;
+      }
+    }
+    return false;
+  }
+
+  drawLandmark(g, cx, cy) {
+    const lm = this.landmarkAt(cx, cy);
+    if (!lm) return;
+    g.save();
+    g.translate(lm.x, lm.y);
+    g.rotate(lm.rot);
+    drawLandmarkShape(g, lm.kind);
+    g.restore();
+  }
+
   drawFeatures(g, cx, cy) {
     const rng = mulberry32((cx * 73856093) ^ (cy * 19349663) ^ 0x5eed);
     const x0 = cx * CHUNK, y0 = cy * CHUNK;
@@ -394,6 +632,7 @@ class Terrain {
       const h = heightAt(x, y);
       if (h < SHORE + 0.01) continue;
       if (this.roads.length && this.nearRoad(x, y, 22)) continue;
+      if (this.inLandmark(x, y, cx, cy)) continue;
       const m = moistAt(x, y);
       const T = THEATRE;
       if (h < HILLS) {

@@ -61,7 +61,10 @@ const Input = {
   sticks: { move: null, aim: null },
   buttons: {},
   tapped: false,
-  tapX: 0, // screen x of the latest click or tap
+  tapX: 0, tapY: 0, // screen position of the latest click or tap
+  pad: null, // this frame's gamepad state, or null with no pad connected
+  padPrev: {},
+  menuMode: true, // set by the game: menus take d-pad/stick input as arrow keys
   btnLayout: [],
 
   init(canvas) {
@@ -101,6 +104,7 @@ const Input = {
     Sfx.init();
     this.tapped = true;
     this.tapX = e.clientX;
+    this.tapY = e.clientY;
     if (e.pointerType === 'touch') {
       e.preventDefault();
       this.touchMode = true;
@@ -173,6 +177,47 @@ const Input = {
       { id: 'turbo', x: w - 66, y: h - 282, r: 28, label: 'TRB' },
       { id: 'pause', x: w / 2, y: h - 30, r: 18, label: 'II' },
     ];
+  },
+
+  // Standard-mapping gamepad: left stick flies, right stick aims, RT fires, LT missiles,
+  // RB flares, LB turbo, Start pauses, A confirms, B goes back. In menus the d-pad and
+  // left stick act as arrow keys.
+  pollGamepad() {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const gp = Array.from(pads || []).find((p) => p && p.connected);
+    if (!gp) {
+      this.pad = null;
+      return;
+    }
+    const dz = (v) => (Math.abs(v || 0) < 0.2 ? 0 : v);
+    const btn = (i) => !!(gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.4));
+    const pad = {
+      lx: dz(gp.axes[0]), ly: dz(gp.axes[1]), rx: dz(gp.axes[2]), ry: dz(gp.axes[3]),
+      fire: btn(7), missile: btn(6), flare: btn(5), turbo: btn(4) || btn(10),
+      a: btn(0), b: btn(1), start: btn(9), mute: btn(8),
+      up: btn(12) || dz(gp.axes[1]) < -0.6, down: btn(13) || dz(gp.axes[1]) > 0.6,
+      left: btn(14) || dz(gp.axes[0]) < -0.6, right: btn(15) || dz(gp.axes[0]) > 0.6,
+    };
+    const edge = (k) => pad[k] && !this.padPrev[k];
+    const used = Object.values(pad).some((v) => v === true || (typeof v === 'number' && v !== 0));
+    if (used) {
+      this.touchMode = false;
+      Sfx.init();
+    }
+    if (edge('a')) this.pressed.Enter = true;
+    if (edge('b')) this.pressed.Escape = true;
+    if (edge('start')) this.pressed.btn_pause = true;
+    if (edge('mute')) this.pressed.btn_mute = true;
+    pad.flareHit = edge('flare');
+    if (this.menuMode) {
+      if (edge('up')) this.pressed.ArrowUp = true;
+      if (edge('down')) this.pressed.ArrowDown = true;
+      if (edge('left')) this.pressed.ArrowLeft = true;
+      if (edge('right')) this.pressed.ArrowRight = true;
+      if (edge('start')) this.pressed.Enter = true;
+    }
+    this.padPrev = pad;
+    this.pad = pad;
   },
 
   hit(code) {

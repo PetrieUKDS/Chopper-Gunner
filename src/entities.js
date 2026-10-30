@@ -919,15 +919,19 @@ const VEHICLES = {
 };
 
 class Player {
-  constructor(x, y, vehicle = VEHICLES.stormwolf) {
+  // mods: workshop upgrade levels and difficulty, e.g. { armor: 1, racks: 2, hurt: 0.65 }.
+  constructor(x, y, vehicle = VEHICLES.stormwolf, mods = {}) {
     this.vehicle = vehicle;
+    this.speedMult = 1 + 0.06 * (mods.engine || 0);
+    this.heatMult = 1 - 0.15 * (mods.cooling || 0);
+    this.hurtMult = mods.hurt || 1;
     this.x = x; this.y = y; this.vx = 0; this.vy = 0;
     this.angle = -Math.PI / 2;
     this.aimAngle = this.angle;
     this.r = vehicle.r;
-    this.hp = this.maxHp = vehicle.hp;
-    this.missiles = this.maxMissiles = vehicle.missiles;
-    this.flares = this.maxFlares = vehicle.flares;
+    this.hp = this.maxHp = Math.round(vehicle.hp * (1 + 0.15 * (mods.armor || 0)));
+    this.missiles = this.maxMissiles = vehicle.missiles + 2 * (mods.racks || 0);
+    this.flares = this.maxFlares = vehicle.flares + (mods.flares || 0);
     this.turbo = 100;
     this.heat = 0;
     this.overheat = false;
@@ -950,7 +954,7 @@ class Player {
     if (this.turboOn) this.turbo = Math.max(0, this.turbo - 30 * dt);
     else this.turbo = Math.min(100, this.turbo + 9 * dt);
 
-    const maxSpd = this.turboOn ? this.vehicle.turboSpeed : this.vehicle.speed;
+    const maxSpd = (this.turboOn ? this.vehicle.turboSpeed : this.vehicle.speed) * this.speedMult;
     const k = 1 - Math.exp(-(this.turboOn ? 2.4 : 3.2) * dt);
     this.vx += (mx * maxSpd - this.vx) * k;
     this.vy += (my * maxSpd - this.vy) * k;
@@ -969,7 +973,7 @@ class Player {
     const gun = this.vehicle.gun, mm = this.vehicle.missileMount;
     if (c.fire && !this.overheat && this.gunCd <= 0) {
       this.gunCd = gun.cd;
-      this.heat += gun.heat;
+      this.heat += gun.heat * this.heatMult;
       if (this.heat >= 100) {
         this.heat = 100;
         this.overheat = true;
@@ -1042,7 +1046,7 @@ class Player {
 
   damage(n, g) {
     if (this.dead || g.state !== 'play') return;
-    this.hp -= n;
+    this.hp -= n * this.hurtMult;
     this.hitFlash = 0.12;
     g.shake(5);
     Sfx.hit();
