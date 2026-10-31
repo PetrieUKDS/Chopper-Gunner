@@ -123,6 +123,8 @@ const Input = {
       this.mouse.y = e.clientY;
       if (e.button === 0) this.mouse.left = true;
       if (e.button === 2) this.mouse.right = true;
+      // A touchpad tap can press and release between two frames, so remember it.
+      this.pressed['Mouse' + e.button] = true;
     }
   },
 
