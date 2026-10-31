@@ -4,10 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Chopper Gunner</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="preload" href="fonts/orbitron.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/share-tech-mono.woff2" as="font" type="font/woff2" crossorigin>
   <style>
+    /* fonts are served with the game (SIL OFL, see fonts/) so players' browsers never contact a third party */
+    @font-face { font-family: 'Orbitron'; font-weight: 700 900; font-display: swap; src: url(fonts/orbitron.woff2) format('woff2'); }
+    @font-face { font-family: 'Share Tech Mono'; font-weight: 400; font-display: swap; src: url(fonts/share-tech-mono.woff2) format('woff2'); }
     :root { color-scheme: dark; background: #05070a; }
     html, body { height: 100%; margin: 0; background: #05070a; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
     canvas { display: block; width: 100vw; height: 100vh; cursor: default; }
