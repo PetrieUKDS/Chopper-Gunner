@@ -303,7 +303,7 @@ const G = {
     if (Input.action('down')) c.my += 1;
     c.flare = Input.actionHit('flare') || Input.hit('btn_flare');
     c.turbo = Input.action('turbo') || Input.buttons.turbo !== undefined;
-    c.missile = Input.mouse.right || Input.action('missile') || Input.actionHit('missile') || Input.buttons.missile !== undefined;
+    c.missile = Input.mouse.right || Input.hit('Mouse2') || Input.action('missile') || Input.actionHit('missile') || Input.buttons.missile !== undefined;
     if (Input.touchMode) {
       const m = Input.stick('move');
       c.mx += m.x;
@@ -318,7 +318,7 @@ const G = {
     } else {
       const turn = (Input.action('turnRight') ? 1 : 0) - (Input.action('turnLeft') ? 1 : 0);
       if (turn) this.aimMode = 'keys';
-      else if (Input.mouseMoved || Input.mouse.left || Input.mouse.right) this.aimMode = 'mouse';
+      else if (Input.mouseMoved || Input.mouse.left || Input.mouse.right || Input.hit('Mouse0')) this.aimMode = 'mouse';
       if (this.aimMode === 'keys') {
         p.aimAngle += turn * 3.6 * dt;
         c.aimX = p.x + Math.cos(p.aimAngle) * 300;
@@ -330,7 +330,7 @@ const G = {
         c.aimY = wpt.y;
         p.aimAngle = p.angle;
       }
-      c.fire = Input.mouse.left || Input.action('fire') || Input.actionHit('fire');
+      c.fire = Input.mouse.left || Input.hit('Mouse0') || Input.action('fire') || Input.actionHit('fire');
     }
     const pad = Input.pad;
     if (pad) {
