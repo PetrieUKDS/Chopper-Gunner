@@ -83,7 +83,7 @@ After the title screen, the hangar lets you pick your aircraft. Use ← / → (o
 | **Kestrel** | Scout helicopter | Fastest and most agile, quick-firing gun, 7 flares, small target | Light armour, only 4 missiles |
 | **Titan** | Heavy twin-rotor gunship | Huge armour, 14 missiles, hardest-hitting guns | Slow, turns sluggishly, big target |
 
-Overwatch's radio calls use the callsign of the aircraft you're flying.
+Skywatch's radio calls use the callsign of the aircraft you're flying.
 
 Each aircraft is an entry in the `VEHICLES` list in `src/entities.js`. An entry sets how the aircraft looks (its draw function and colours) and how it handles: armour, missiles, flares, cruise and turbo speed, turn rate, hitbox size, gun position, fire rate, damage and heat, and where missiles launch from. Add an entry and it appears in the hangar automatically.
 

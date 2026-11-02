@@ -1086,7 +1086,7 @@ const G = {
     const ts = small ? 32 : 64;
     Hud.text(ctx, 'CHOPPER', w / 2, h * 0.3, { size: ts, align: 'center', font: TITLE_FONT, weight: '900', color: '#e9ecef' });
     Hud.text(ctx, 'GUNNER', w / 2, h * 0.3 + ts * 1.05, { size: ts, align: 'center', font: TITLE_FONT, weight: '900', color: HUD_AMBER });
-    Hud.text(ctx, 'AN OVERWATCH CAMPAIGN', w / 2, h * 0.3 + ts * 1.05 + 34, { size: small ? 13 : 16, align: 'center', color: '#9fb4c0' });
+    Hud.text(ctx, 'A SKYWATCH CAMPAIGN', w / 2, h * 0.3 + ts * 1.05 + 34, { size: small ? 13 : 16, align: 'center', color: '#9fb4c0' });
 
     const lines = Input.touchMode || 'ontouchstart' in window && w < 900
       ? ['LEFT THUMB  move', 'RIGHT THUMB  aim + fire', 'MSL missiles   FLR flares   TRB turbo', 'Hover over the base pad to repair & rearm']
@@ -1208,7 +1208,7 @@ const G = {
     const x = (w - pw) / 2;
     let y = Math.max(60, h * 0.2);
     const tour = Math.floor(this.missionIndex / MISSIONS.length);
-    Hud.text(ctx, `OVERWATCH SECURE BRIEFING - ${THEATRE.label}${tour ? ' - TOUR ' + (tour + 1) : ''}`, x, y, { size: 13, color: '#9fb4c0' });
+    Hud.text(ctx, `SKYWATCH SECURE BRIEFING - ${THEATRE.label}${tour ? ' - TOUR ' + (tour + 1) : ''}`, x, y, { size: 13, color: '#9fb4c0' });
     y += 34;
     Hud.text(ctx, this.mission.title, x, y, { size: small ? 20 : 30, font: TITLE_FONT, weight: '700', color: HUD_AMBER });
     y += 36;
@@ -1310,7 +1310,7 @@ const G = {
     if (this.stateT < 1) return;
     const last = (this.missionIndex + 1) % MISSIONS.length === 0;
     const lines = [`Score ${this.score}`, `Kills this mission: ${this.kills}`, `Earned ${this.lastEarned}   Funds ${Save.data.funds}`, ''];
-    if (last) lines.unshift('The militia air force is finished. Overwatch has a new tour for you.');
+    if (last) lines.unshift('The militia air force is finished. Skywatch has a new tour for you.');
     lines.push('PRESS SPACE / TAP FOR THE WORKSHOP');
     this.drawCenterPanel(ctx, last ? 'CAMPAIGN COMPLETE' : 'MISSION COMPLETE', lines);
   },

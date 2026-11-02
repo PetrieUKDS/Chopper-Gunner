@@ -8,7 +8,7 @@ const MISSIONS = [
     theatre: 'desert',
     music: 0,
     brief: [
-      'Overwatch to {callsign}.',
+      'Skywatch to {callsign}.',
       'Militia forces have seized three surface-to-air missile sites in the interior.',
       'Our relief flights cannot get through until those sites are gone.',
       'Destroy all three. Expect armour and light vehicles around each one.',
@@ -41,7 +41,7 @@ const MISSIONS = [
     music: 1,
     night: true,
     brief: [
-      'Overwatch to {callsign}.',
+      'Skywatch to {callsign}.',
       'An arms convoy is moving along the highway toward the northern border crossing.',
       'Those weapons cannot reach the militia. Destroy every truck.',
       'If more than two trucks make it across, the mission is a failure.',
@@ -95,7 +95,7 @@ const MISSIONS = [
     theatre: 'arctic',
     music: 3,
     brief: [
-      'Overwatch to {callsign}.',
+      'Skywatch to {callsign}.',
       'The militia is fuelling its armour from depots hidden across the northern tundra.',
       'Cut off their supply. Destroy all five fuel depots.',
       'Each depot is ringed with anti-aircraft guns. Their bursts are short, but they hurt.',
@@ -125,7 +125,7 @@ const MISSIONS = [
     theatre: 'jungle',
     music: 4,
     brief: [
-      'Overwatch to {callsign}.',
+      'Skywatch to {callsign}.',
       'Militia gunboats are running weapons along the jungle coast.',
       'Sink all six. Two of them carry anti-air missiles.',
       'Expect gun positions along the shoreline and gunships under the canopy.',
@@ -154,7 +154,7 @@ const MISSIONS = [
     theatre: 'ash',
     music: 5,
     brief: [
-      'Overwatch to {callsign}.',
+      'Skywatch to {callsign}.',
       'Militia command is dug in beneath the volcanic oil fields.',
       'Their bunker sits behind an energy shield fed by three generators.',
       'Knock out the generators to drop the shield, then flatten the bunker.',
@@ -191,7 +191,7 @@ const MISSIONS = [
     theatre: 'canyon',
     music: 2,
     brief: [
-      'Overwatch to {callsign}. This one is personal.',
+      'Skywatch to {callsign}. This one is personal.',
       'The militia has a stolen prototype gunship - callsign RED TALON.',
       'Built on a Stormwolf airframe: fast, armoured, and carrying its own missiles.',
       'It is hiding out in the red canyons under SAM cover.',
