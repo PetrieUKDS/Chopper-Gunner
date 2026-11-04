@@ -2,6 +2,9 @@
 
 const VEHICLE_KEY = 'chopperGunner.vehicle';
 const BONUS_STAR = 1500; // score (and so funds) for each bonus star
+// Tally form behind the SEND FEEDBACK button in settings. Leave it empty to hide the button.
+// The form can pick up input, screen, fx and mission as hidden fields; nothing personal is sent.
+const FEEDBACK_URL = '';
 
 function fmtTime(s) {
   s = Math.max(0, Math.floor(s));
@@ -693,6 +696,19 @@ const G = {
     this.setState('settings');
   },
 
+  // Opens the feedback form in a new tab, or in this one if pop-ups are blocked.
+  openFeedback() {
+    const m = MISSIONS[this.missionIndex];
+    const q = new URLSearchParams({
+      input: Input.touchMode ? 'touch' : Input.pad ? 'gamepad' : 'keyboard',
+      screen: `${Math.round(this.w)}x${Math.round(this.h)}`,
+      fx: this.lowFx() ? 'low' : 'high',
+      mission: m ? m.title : '',
+    });
+    const url = `${FEEDBACK_URL}${FEEDBACK_URL.includes('?') ? '&' : '?'}${q}`;
+    if (!window.open(url, '_blank', 'noopener')) location.assign(url);
+  },
+
   // Each row: a label, how to show its value, and how ←/→ changes it.
   settingRows() {
     const s = Settings.data;
@@ -723,13 +739,21 @@ const G = {
       if (rows[i].apply) rows[i].apply();
       Sfx.beep();
     };
-    if (Input.hit('ArrowUp') || Input.hit('KeyW')) pr.row = (pr.row + rows.length) % (rows.length + 1);
-    if (Input.hit('ArrowDown') || Input.hit('KeyS') || Input.hit('Tab')) pr.row = (pr.row + 1) % (rows.length + 1);
+    // Below the setting rows: BACK, then SEND FEEDBACK when there's a form to send to.
+    const n = rows.length + (FEEDBACK_URL ? 2 : 1);
+    if (Input.hit('ArrowUp') || Input.hit('KeyW')) pr.row = (pr.row + n - 1) % n;
+    if (Input.hit('ArrowDown') || Input.hit('KeyS') || Input.hit('Tab')) pr.row = (pr.row + 1) % n;
+    const press = this.stateT > 0.3 && (Input.hit('Space') || Input.hit('Enter'));
     if (pr.row < rows.length) {
       if (Input.hit('ArrowLeft') || Input.hit('KeyA')) change(pr.row, -1);
       if (Input.hit('ArrowRight') || Input.hit('KeyD')) change(pr.row, 1);
-      if (this.stateT > 0.3 && (Input.hit('Space') || Input.hit('Enter')) && !rows[pr.row].bar) change(pr.row, 1);
-    } else if (this.stateT > 0.3 && (Input.hit('Space') || Input.hit('Enter'))) return this.setState(pr.from);
+      if (press && !rows[pr.row].bar) change(pr.row, 1);
+    } else {
+      if (FEEDBACK_URL && (Input.hit('ArrowLeft') || Input.hit('KeyA'))) pr.row = rows.length;
+      if (FEEDBACK_URL && (Input.hit('ArrowRight') || Input.hit('KeyD'))) pr.row = rows.length + 1;
+      if (press && pr.row === rows.length) return this.setState(pr.from);
+      if (press) this.openFeedback();
+    }
     if (Input.hit('Escape') || Input.hit('KeyO')) return this.setState(pr.from);
     const hit = this.tapHit();
     if (!hit) return;
@@ -741,6 +765,10 @@ const G = {
       if (pr.row === hit.i && !rows[hit.i].bar) change(hit.i, 1);
       pr.row = hit.i;
     } else if (hit.kind === 'back') this.setState(pr.from);
+    else if (hit.kind === 'feedback') {
+      pr.row = rows.length + 1;
+      this.openFeedback();
+    }
   },
 
   drawSettings(ctx) {
@@ -780,12 +808,18 @@ const G = {
       hits.push({ kind: 'row', i, x: x0, y: ry, w: pw, h: rowH - 6 });
     });
     const by = y + rows.length * rowH + 4;
-    const bs = this.prefs.row === rows.length;
-    ctx.strokeStyle = bs ? HUD_AMBER : HUD_GREEN;
-    ctx.lineWidth = bs ? 2 : 1.5;
-    ctx.strokeRect(w / 2 - 80, by, 160, 34);
-    Hud.text(ctx, 'BACK', w / 2, by + 22, { size: 14, align: 'center', color: bs ? HUD_AMBER : HUD_GREEN });
-    hits.push({ kind: 'back', x: w / 2 - 80, y: by, w: 160, h: 34 });
+    const button = (label, kind, bx, bw, sel) => {
+      ctx.strokeStyle = sel ? HUD_AMBER : HUD_GREEN;
+      ctx.lineWidth = sel ? 2 : 1.5;
+      ctx.strokeRect(bx, by, bw, 34);
+      Hud.text(ctx, label, bx + bw / 2, by + 22, { size: 14, align: 'center', color: sel ? HUD_AMBER : HUD_GREEN });
+      hits.push({ kind, x: bx, y: by, w: bw, h: 34 });
+    };
+    if (FEEDBACK_URL) {
+      const bw = Math.min(170, (pw - 12) / 2);
+      button('BACK', 'back', w / 2 - bw - 6, bw, this.prefs.row === rows.length);
+      button('SEND FEEDBACK', 'feedback', w / 2 + 6, bw, this.prefs.row === rows.length + 1);
+    } else button('BACK', 'back', w / 2 - 80, 160, this.prefs.row === rows.length);
     if (!Input.touchMode) {
       if (by + 60 < h) Hud.text(ctx, '↑↓ SELECT   ←→ CHANGE   ESC BACK', w / 2, by + 60, { size: 12, align: 'center', color: '#9fb4c0' });
     }

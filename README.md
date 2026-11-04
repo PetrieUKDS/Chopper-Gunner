@@ -105,6 +105,10 @@ Land on your base pad to repair and rearm. Your guns overheat if you hold the tr
 | Vibration | Buzz when you're hit, on phones that support it |
 | Training | Show the first-flight guide at the start of Operation Sandstorm. It turns itself off once you finish or skip it, so switch it back on to see it again. |
 
+### Feedback
+
+Settings has a **SEND FEEDBACK** button that opens a Tally form in a new tab. It passes along which controls you're using, your screen size, the effects level and the last mission you played, so reports come with some context. Nothing personal is sent. The form link is `FEEDBACK_URL` at the top of `src/game.js`, and the button stays hidden while that's empty.
+
 ### Training
 
 The first time you fly Operation Sandstorm, a five-step guide walks you through flying, firing, missiles, flares and landing on the pad to repair. The hints match whatever you're playing with: touch, gamepad or keyboard. Enemies don't send reinforcements and the par clock doesn't run until training is over. Press Tab, or tap **TAP TO SKIP**, to skip it.
