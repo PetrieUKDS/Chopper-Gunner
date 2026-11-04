@@ -4,7 +4,7 @@ const VEHICLE_KEY = 'chopperGunner.vehicle';
 const BONUS_STAR = 1500; // score (and so funds) for each bonus star
 // Tally form behind the SEND FEEDBACK button in settings. Leave it empty to hide the button.
 // The form can pick up input, screen, fx and mission as hidden fields; nothing personal is sent.
-const FEEDBACK_URL = '';
+const FEEDBACK_URL = 'https://tally.so/r/zEjkY0';
 
 function fmtTime(s) {
   s = Math.max(0, Math.floor(s));
