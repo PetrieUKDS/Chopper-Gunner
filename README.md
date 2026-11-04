@@ -1,4 +1,4 @@
-# Chopper Gunner
+# Talon Strike
 
 A top-down helicopter gunship game for the browser, drawn on a single canvas. There's no build step and no dependencies. All sound, music included, is synthesised live with WebAudio, so there are no audio files.
 

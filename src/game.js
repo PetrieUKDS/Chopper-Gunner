@@ -1476,8 +1476,8 @@ const G = {
     const w = this.w, h = this.h;
     const small = w < 600;
     const ts = small ? 32 : 64;
-    Hud.text(ctx, 'CHOPPER', w / 2, h * 0.3, { size: ts, align: 'center', font: TITLE_FONT, weight: '900', color: '#e9ecef' });
-    Hud.text(ctx, 'GUNNER', w / 2, h * 0.3 + ts * 1.05, { size: ts, align: 'center', font: TITLE_FONT, weight: '900', color: HUD_AMBER });
+    Hud.text(ctx, 'TALON', w / 2, h * 0.3, { size: ts, align: 'center', font: TITLE_FONT, weight: '900', color: '#e9ecef' });
+    Hud.text(ctx, 'STRIKE', w / 2, h * 0.3 + ts * 1.05, { size: ts, align: 'center', font: TITLE_FONT, weight: '900', color: HUD_AMBER });
     Hud.text(ctx, 'A SKYWATCH CAMPAIGN', w / 2, h * 0.3 + ts * 1.05 + 34, { size: small ? 13 : 16, align: 'center', color: '#9fb4c0' });
 
     const lines = Input.touchMode || 'ontouchstart' in window && w < 900
