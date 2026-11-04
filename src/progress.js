@@ -20,12 +20,37 @@ const UPGRADES = [
 ];
 
 const SAVE_KEY = 'chopperGunner.save';
+const SETTINGS_KEY = 'chopperGunner.settings';
+
+// Player preferences, kept apart from the campaign save. Volumes run 0-10.
+const Settings = {
+  data: { music: 7, sfx: 8, shake: true, autofire: false },
+
+  load() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
+      if (saved && typeof saved === 'object') Object.assign(this.data, saved);
+    } catch (e) { /* storage unavailable or corrupt: keep defaults */ }
+    this.apply();
+  },
+
+  write() {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.data));
+    } catch (e) { /* storage unavailable */ }
+    this.apply();
+  },
+
+  apply() {
+    Sfx.setVolumes(this.data.music / 10, this.data.sfx / 10);
+  },
+};
 
 const Save = {
   data: null,
 
   load() {
-    this.data = { unlocked: 1, best: {}, funds: 0, upgrades: {}, difficulty: 'normal' };
+    this.data = { unlocked: 1, best: {}, stars: {}, funds: 0, upgrades: {}, difficulty: 'normal', campaignDone: false };
     try {
       const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
       if (saved && typeof saved === 'object') Object.assign(this.data, saved);
@@ -59,11 +84,14 @@ const Save = {
     return m;
   },
 
-  // Record a cleared mission: unlock the next one, keep the best score, bank the earnings.
-  cleared(index, earned) {
+  // Record a cleared mission: unlock the next one, keep the best score and star count,
+  // bank the earnings. Clearing the last mission finishes the campaign.
+  cleared(index, earned, stars) {
     const i = index % MISSIONS.length;
     this.data.unlocked = Math.max(this.data.unlocked, Math.min(MISSIONS.length, i + 2));
     this.data.best[i] = Math.max(this.data.best[i] || 0, earned);
+    this.data.stars[i] = Math.max(this.data.stars[i] || 0, stars);
+    if (i === MISSIONS.length - 1) this.data.campaignDone = true;
     this.data.funds += earned;
     this.write();
   },

@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Chopper Gunner Sprites</title>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <style>
+    @font-face { font-family: 'Orbitron'; font-weight: 700 900; src: url(fonts/orbitron.woff2) format('woff2'); }
+    @font-face { font-family: 'Share Tech Mono'; font-weight: 400; src: url(fonts/share-tech-mono.woff2) format('woff2'); }
     html, body { margin: 0; background: #05070a; color: #7dffb0; font: 14px "Share Tech Mono", monospace; }
     h1 { font: 900 22px Orbitron, sans-serif; color: #ffc04a; margin: 16px; }
     p { margin: 0 16px 12px; color: #9aa8a0; }
@@ -53,6 +54,11 @@
       { label: 'FUEL DEPOT', e: Object.assign(new FuelDepot(0, 0, 1), { angle: 0.3 }), zoom: 1 },
       { label: 'GENERATOR', e: Object.assign(new Generator(0, 0, 1), { angle: -0.4, fan: 0.5 }), zoom: 1.2 },
       { label: 'COMMAND BUNKER (SHIELDED)', e: Object.assign(new Bunker(0, 0, 1), { turret: -0.8 }), zoom: 0.8 },
+      { label: 'AID TRUCK (FRIENDLY)', e: Object.assign(new AidTruck([{ x: 0, y: 0 }, { x: 100, y: 0 }], 0), { angle: -0.6 }), zoom: 1.2 },
+      { label: 'DOWNED CREW (FRIENDLY)', e: Object.assign(new Survivor(0, 0), { t: 0.4, drawShadow() {} }), zoom: 1.2 },
+      // Pickups: supplies, then the three power-ups.
+      ...['repair', 'missiles', 'flares', 'guns', 'shield', 'cluster'].map((k) => (
+        { label: 'PICKUP: ' + k.toUpperCase(), e: Object.assign(new Pickup(0, 0, k), { t: 0, drawShadow() {} }), zoom: 1.6 })),
     ];
 
     const canvas = document.getElementById('sheet');

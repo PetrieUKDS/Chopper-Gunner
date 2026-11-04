@@ -1,6 +1,16 @@
 'use strict';
 
 const VEHICLE_KEY = 'chopperGunner.vehicle';
+const BONUS_STAR = 1500; // score (and so funds) for each bonus star
+
+function fmtTime(s) {
+  s = Math.max(0, Math.floor(s));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function starString(n, of = 3) {
+  return '★'.repeat(n) + '☆'.repeat(of - n);
+}
 
 const G = {
   canvas: null,
@@ -23,6 +33,8 @@ const G = {
 
   enemies: [], bullets: [], ebullets: [], missiles: [], flares: [],
   particles: [], pickups: [], floaters: [], emitters: [], banners: [],
+  friendlies: [], // aid trucks, downed crew, the base HQ: things to protect
+  delayed: [], // timed explosions, e.g. the boss breaking up: { t, x, y, size, ring }
 
   score: 0,
   missionStartScore: 0,
@@ -33,6 +45,11 @@ const G = {
   lockTarget: null,
   missileWarning: false,
   warnBeepT: 0,
+  threats: [], // enemy missiles homing on the player, for the HUD's direction arrows
+  hitMarks: [], // recent hits: { a: world angle they came from, t: fade 1 to 0 }
+  hurtFlash: 0,
+  damageTaken: 0,
+  missionTime: 0,
   reinforceT: 0,
   controls: null,
   result: null,
@@ -47,6 +64,7 @@ const G = {
     this.resize();
     Input.init(this.canvas);
     Save.load();
+    Settings.load();
     setTheatre(MISSIONS[0].theatre);
     this.terrain = new Terrain();
     this.base = this.findBase();
@@ -55,6 +73,7 @@ const G = {
     try {
       this.best = Number(localStorage.getItem('chopperGunner.best')) || 0;
       this.vehicle = VEHICLES[localStorage.getItem(VEHICLE_KEY)] || this.vehicle;
+      if (vehicleLocked(this.vehicle)) this.vehicle = VEHICLES.stormwolf;
     } catch (e) {
       this.best = 0;
     }
@@ -150,15 +169,25 @@ const G = {
     Music.play(this.mission.music);
     const tour = Math.floor(i / MISSIONS.length);
     this.difficulty = (1 + (i % MISSIONS.length) * 0.08 + tour * 0.4) * Save.difficulty().enemy;
-    setTheatre(this.mission.theatre);
+    setTheatre(this.mission.theatre, this.mission.seed);
     Weather.set(THEATRE.weather, this.w, this.h);
     this.base = this.findBase();
     this.missionStartScore = this.score;
     this.enemies = []; this.bullets = []; this.ebullets = []; this.missiles = []; this.flares = [];
     this.particles = []; this.pickups = []; this.floaters = []; this.emitters = []; this.banners = [];
+    this.delayed = [];
+    this.friendlies = [];
+    this.delivered = 0; this.convoyLost = 0; // escort
+    this.carrying = 0; this.rescued = 0; this.captured = 0; // rescue
     this.kills = 0;
     this.escaped = 0;
     this.checkpoint = null;
+    this.checkpointLabel = '';
+    this.hq = null;
+    this.threats = []; this.hitMarks = [];
+    this.hurtFlash = 0;
+    this.damageTaken = 0;
+    this.missionTime = 0;
     this.terrain.reset();
     this.player = new Player(this.base.x, this.base.y, this.vehicle, Save.mods());
     this.aimMode = 'keys';
@@ -189,6 +218,7 @@ const G = {
   // ------------------------------------------------------------ helpers
 
   shake(a) {
+    if (!Settings.data.shake) return;
     this.shakeAmt = Math.max(this.shakeAmt, a);
   },
 
@@ -216,7 +246,8 @@ const G = {
     const p = this.player;
     const kinds = ['repair', 'missiles', 'flares'];
     let kind = pick(kinds);
-    if (p.hp < 50 && Math.random() < 0.6) kind = 'repair';
+    if (Math.random() < 0.25) kind = pick(['guns', 'shield', 'cluster']);
+    else if (p.hp < 50 && Math.random() < 0.6) kind = 'repair';
     else if (p.missiles < 3 && Math.random() < 0.5) kind = 'missiles';
     this.pickups.push(new Pickup(x, y, kind));
   },
@@ -262,6 +293,7 @@ const G = {
   explode(x, y, size, o = {}) {
     const n = Math.min(36, 6 + ((size * 0.7) | 0));
     this.particles.push(new Particle(x, y, 0, 0, 0.2, size * 1.7, size * 3, 'flash'));
+    if (size >= 30 || o.ring) this.particles.push(new Particle(x, y, 0, 0, 0.45, size * 0.6, size * 7, 'ring'));
     for (let i = 0; i < n; i++) {
       const a = rand(0, TAU), s = rand(20, size * 5);
       this.particles.push(new Particle(x, y, Math.cos(a) * s, Math.sin(a) * s, rand(0.3, 0.75), rand(size * 0.25, size * 0.6), size * 0.7, 'fire'));
@@ -287,6 +319,30 @@ const G = {
       Sfx.explosion(size / 30, near);
     }
     if (o.ground) this.terrain.addDecal({ type: 'scorch', x, y, r: size * 1.5 });
+  },
+
+  // A cluster bomb splits into bomblets that blanket the area in front of it.
+  clusterBurst(x, y) {
+    this.explode(x, y, 20);
+    for (let i = 0; i < 10; i++) {
+      const a = rand(0, TAU), d = rand(30, 150);
+      this.delayed.push({ t: 0.08 + i * 0.05, x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, size: 22, dmg: 34, r: 70 });
+    }
+  },
+
+  updateDelayed(dt) {
+    for (const ex of this.delayed) {
+      ex.t -= dt;
+      if (ex.t > 0) continue;
+      this.explode(ex.x, ex.y, ex.size, { ground: isLand(ex.x, ex.y), ring: ex.ring });
+      if (ex.dmg) {
+        for (const e of this.enemies) {
+          if (!e.dead && dist2(e.x, e.y, ex.x, ex.y) < (ex.r + e.r) * (ex.r + e.r)) e.hurt(ex.dmg, this);
+        }
+      }
+      if (ex.ring) this.shake(18);
+    }
+    this.delayed = this.delayed.filter((ex) => ex.t > 0);
   },
 
   readControls(dt) {
@@ -349,6 +405,12 @@ const G = {
       c.flare = c.flare || pad.flareHit;
       c.turbo = c.turbo || pad.turbo;
     }
+    // Auto-fire: the guns open up on their own when a target sits in front of the nose.
+    const t = this.lockTarget;
+    if (Settings.data.autofire && t && !t.dead && !p.overheat) {
+      const ta = Math.atan2(t.y - p.y, t.x - p.x);
+      if (dist(p.x, p.y, t.x, t.y) < 640 && Math.abs(angDiff(p.angle, ta)) < 0.3) c.fire = true;
+    }
     return c;
   },
 
@@ -383,6 +445,10 @@ const G = {
           this.openControls();
           break;
         }
+        if (Input.hit('KeyO')) {
+          this.openSettings();
+          break;
+        }
         if (this.stateT > 0.3 && Input.confirm()) {
           Sfx.confirm();
           this.setState('hangar');
@@ -407,11 +473,15 @@ const G = {
         break;
       case 'paused':
         if (Input.hit('KeyC')) this.openControls();
+        else if (Input.hit('KeyO')) this.openSettings();
         else if (this.stateT > 0.2 && (Input.actionHit('pause') || Input.hit('btn_pause') || Input.confirm())) this.setState('play');
         break;
       case 'controls':
         this.player.rotor += dt * 40;
         this.updateControlsMenu();
+        break;
+      case 'settings':
+        this.updateSettings();
         break;
       case 'play':
         if (Input.actionHit('pause') || Input.hit('btn_pause')) {
@@ -492,6 +562,97 @@ const G = {
     this.setState(this.menu.from);
   },
 
+  // ------------------------------------------------------------ settings
+
+  openSettings() {
+    this.prefs = { row: 0, from: this.state };
+    this.menuHits = null;
+    this.setState('settings');
+  },
+
+  // Each row: a label, how to show its value, and how ←/→ changes it.
+  settingRows() {
+    const s = Settings.data;
+    const vol = (k) => ({ show: () => s[k], bar: () => s[k] / 10, step: (d) => (s[k] = clamp(s[k] + d, 0, 10)) });
+    const flag = (k) => ({ show: () => (s[k] ? 'ON' : 'OFF'), step: () => (s[k] = !s[k]) });
+    return [
+      { label: 'MUSIC VOLUME', ...vol('music') },
+      { label: 'SOUND VOLUME', ...vol('sfx') },
+      { label: 'SCREEN SHAKE', ...flag('shake') },
+      { label: 'AUTO-FIRE', ...flag('autofire'), note: 'Guns fire by themselves at targets in front of you' },
+    ];
+  },
+
+  updateSettings() {
+    const rows = this.settingRows();
+    const pr = this.prefs;
+    const change = (i, d) => {
+      rows[i].step(d);
+      Settings.write();
+      Sfx.beep();
+    };
+    if (Input.hit('ArrowUp') || Input.hit('KeyW')) pr.row = (pr.row + rows.length) % (rows.length + 1);
+    if (Input.hit('ArrowDown') || Input.hit('KeyS') || Input.hit('Tab')) pr.row = (pr.row + 1) % (rows.length + 1);
+    if (pr.row < rows.length) {
+      if (Input.hit('ArrowLeft') || Input.hit('KeyA')) change(pr.row, -1);
+      if (Input.hit('ArrowRight') || Input.hit('KeyD')) change(pr.row, 1);
+      if (this.stateT > 0.3 && (Input.hit('Space') || Input.hit('Enter')) && !rows[pr.row].bar) change(pr.row, 1);
+    } else if (this.stateT > 0.3 && (Input.hit('Space') || Input.hit('Enter'))) return this.setState(pr.from);
+    if (Input.hit('Escape') || Input.hit('KeyO')) return this.setState(pr.from);
+    const hit = this.tapHit();
+    if (!hit) return;
+    if (hit.kind === 'step') {
+      pr.row = hit.i;
+      change(hit.i, hit.d);
+    } else if (hit.kind === 'back') this.setState(pr.from);
+  },
+
+  drawSettings(ctx) {
+    this.dim(ctx, 0.7);
+    const w = this.w, h = this.h;
+    const small = w < 600;
+    const rows = this.settingRows();
+    const pw = Math.min(520, w - 24);
+    const x0 = (w - pw) / 2;
+    const rowH = small ? 50 : 56;
+    const hits = [];
+    let y = Math.max(50, (h - rowH * rows.length - 150) / 2);
+    Hud.text(ctx, 'SETTINGS', w / 2, y, { size: small ? 22 : 30, align: 'center', font: TITLE_FONT, weight: '900', color: HUD_AMBER });
+    y += 30;
+    rows.forEach((r, i) => {
+      const ry = y + i * rowH;
+      const sel = this.prefs.row === i;
+      ctx.fillStyle = sel ? 'rgba(255,192,74,0.12)' : 'rgba(255,255,255,0.03)';
+      ctx.fillRect(x0, ry, pw, rowH - 6);
+      if (sel) {
+        ctx.strokeStyle = HUD_AMBER;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(x0 + 0.5, ry + 0.5, pw - 1, rowH - 7);
+      }
+      const mid = ry + (rowH - 6) / 2;
+      Hud.text(ctx, r.label, x0 + 14, mid + (r.note ? -3 : 5), { size: small ? 13 : 15, color: sel ? '#ffffff' : '#c8d6dc' });
+      if (r.note && !small) Hud.text(ctx, r.note, x0 + 14, mid + 13, { size: 11, color: '#9fb4c0' });
+      // ◀ value ▶ on the right, each arrow a tap target.
+      const vx = x0 + pw - 120;
+      Hud.text(ctx, '◀', vx - 52, mid + 6, { size: 18, align: 'center', color: HUD_GREEN });
+      Hud.text(ctx, '▶', vx + 52, mid + 6, { size: 18, align: 'center', color: HUD_GREEN });
+      if (r.bar) Hud.bar(ctx, vx - 34, mid - 4, 68, 9, r.bar(), HUD_GREEN);
+      else Hud.text(ctx, r.show(), vx, mid + 6, { size: 16, align: 'center', color: r.show() === 'ON' ? HUD_GREEN : '#9fb4c0' });
+      hits.push({ kind: 'step', i, d: -1, x: vx - 76, y: ry, w: 46, h: rowH - 6 }, { kind: 'step', i, d: 1, x: vx + 30, y: ry, w: 46, h: rowH - 6 });
+    });
+    const by = y + rows.length * rowH + 8;
+    const bs = this.prefs.row === rows.length;
+    ctx.strokeStyle = bs ? HUD_AMBER : HUD_GREEN;
+    ctx.lineWidth = bs ? 2 : 1.5;
+    ctx.strokeRect(w / 2 - 80, by, 160, 34);
+    Hud.text(ctx, 'BACK', w / 2, by + 22, { size: 14, align: 'center', color: bs ? HUD_AMBER : HUD_GREEN });
+    hits.push({ kind: 'back', x: w / 2 - 80, y: by, w: 160, h: 34 });
+    if (!Input.touchMode) {
+      Hud.text(ctx, '↑↓ SELECT   ←→ CHANGE   ESC BACK', w / 2, Math.min(h - 14, by + 62), { size: 12, align: 'center', color: '#9fb4c0' });
+    }
+    this.menuHits = hits;
+  },
+
   // Aircraft selection between the title and the first briefing.
   updateHangar() {
     const ids = Object.keys(VEHICLES);
@@ -499,9 +660,11 @@ const G = {
       const i = (ids.indexOf(this.pickId()) + d + ids.length) % ids.length;
       this.vehicle = VEHICLES[ids[i]];
       this.player = new Player(this.base.x, this.base.y, this.vehicle);
-      try {
-        localStorage.setItem(VEHICLE_KEY, ids[i]);
-      } catch (e) { /* storage unavailable */ }
+      if (!vehicleLocked(this.vehicle)) {
+        try {
+          localStorage.setItem(VEHICLE_KEY, ids[i]);
+        } catch (e) { /* storage unavailable */ }
+      }
       Sfx.beep();
     };
     if (Input.hit('ArrowLeft') || Input.hit('KeyA') || Input.actionHit('turnLeft')) step(-1);
@@ -518,7 +681,8 @@ const G = {
       else if (x > (this.w * 2) / 3) step(1);
       else launch = true;
     }
-    if (launch) {
+    if (launch && vehicleLocked(this.vehicle)) Sfx.overheat();
+    else if (launch) {
       Sfx.confirm();
       this.openMissions();
     }
@@ -564,6 +728,7 @@ const G = {
     if (Input.hit('ArrowLeft') || Input.hit('KeyA')) Save.setDifficulty(-1);
     if (Input.hit('ArrowRight') || Input.hit('KeyD')) Save.setDifficulty(1);
     if (Input.hit('KeyU')) return this.openWorkshop('missions');
+    if (Input.hit('KeyO')) return this.openSettings();
     if (Input.hit('Escape')) return this.setState('hangar');
     if (this.stateT > 0.3 && (Input.hit('Space') || Input.hit('Enter'))) return launch(this.menuSel);
     const hit = this.tapHit();
@@ -574,6 +739,7 @@ const G = {
     } else if (hit.kind === 'diff') Save.setDifficulty(hit.d);
     else if (hit.kind === 'launch') launch(this.menuSel);
     else if (hit.kind === 'workshop') this.openWorkshop('missions');
+    else if (hit.kind === 'settings') this.openSettings();
     else if (hit.kind === 'back') this.setState('hangar');
   },
 
@@ -584,11 +750,12 @@ const G = {
     const pw = Math.min(620, w - 24);
     const x0 = (w - pw) / 2;
     const hits = [];
-    let y = Math.max(40, h * 0.07);
-    Hud.text(ctx, 'SELECT MISSION', w / 2, y, { size: small ? 20 : 28, align: 'center', font: TITLE_FONT, weight: '900', color: HUD_AMBER });
-    y += small ? 26 : 34;
-    Hud.text(ctx, `${this.vehicle.name}   FUNDS ${Save.data.funds}`, w / 2, y, { size: 13, align: 'center', color: '#9fb4c0' });
-    y += 26;
+    const short = h < 520; // landscape phones: tighter header and rows
+    let y = short ? 26 : Math.max(40, h * 0.07);
+    Hud.text(ctx, 'SELECT MISSION', w / 2, y, { size: short ? 18 : small ? 20 : 28, align: 'center', font: TITLE_FONT, weight: '900', color: HUD_AMBER });
+    y += short ? 22 : small ? 26 : 34;
+    Hud.text(ctx, `${this.vehicle.name}   FUNDS ${Save.data.funds}`, w / 2, y, { size: short ? 12 : 13, align: 'center', color: '#9fb4c0' });
+    y += short ? 22 : 26;
 
     // Difficulty selector.
     const diff = Save.difficulty();
@@ -598,9 +765,10 @@ const G = {
     Hud.text(ctx, diff.name, dx, y, { size: 16, align: 'center', color: diff.id === 'hard' ? HUD_RED : diff.id === 'easy' ? '#5ec8ff' : HUD_GREEN });
     Hud.text(ctx, '▶', dx + 52, y, { size: 16, align: 'center', color: HUD_GREEN });
     hits.push({ kind: 'diff', d: -1, x: dx - 70, y: y - 20, w: 36, h: 28 }, { kind: 'diff', d: 1, x: dx + 34, y: y - 20, w: 36, h: 28 });
-    y += 18;
+    y += short ? 12 : 18;
 
-    const rowH = clamp((h - y - 110) / MISSIONS.length, 34, 54);
+    const rowH = clamp((h - y - (short ? 50 : 110)) / MISSIONS.length, 22, 54);
+    const compact = rowH < 36; // short screens: one line per mission
     MISSIONS.forEach((m, i) => {
       const ry = y + i * rowH;
       const locked = i >= Save.data.unlocked;
@@ -614,30 +782,40 @@ const G = {
       }
       const col = locked ? 'rgba(200,214,220,0.35)' : sel ? '#ffffff' : '#c8d6dc';
       const mid = ry + rowH / 2;
-      Hud.text(ctx, String(i + 1), x0 + 18, mid + 6, { size: small ? 16 : 20, align: 'center', font: TITLE_FONT, weight: '700', color: locked ? col : HUD_AMBER });
-      Hud.text(ctx, m.title, x0 + 40, mid - (small ? 1 : 3), { size: small ? 12 : 15, color: col });
-      Hud.text(ctx, (m.night ? 'NIGHT - ' : '') + THEATRES[m.theatre].label, x0 + 40, mid + (small ? 13 : 15), { size: 11, color: locked ? col : '#9fb4c0' });
       const best = Save.data.best[i];
-      const right = locked ? 'LOCKED' : best ? `BEST ${best}` : 'NOT CLEARED';
-      Hud.text(ctx, right, x0 + pw - 12, mid + 5, { size: small ? 11 : 13, align: 'right', color: locked ? col : best ? HUD_GREEN : '#9fb4c0' });
+      const stars = starString(Save.data.stars[i] || 1);
+      Hud.text(ctx, String(i + 1), x0 + 18, mid + (compact ? 5 : 6), { size: compact ? 14 : small ? 16 : 20, align: 'center', font: TITLE_FONT, weight: '700', color: locked ? col : HUD_AMBER });
+      if (compact) {
+        Hud.text(ctx, m.title.replace('OPERATION ', ''), x0 + 40, mid + 4, { size: 12, color: col });
+        const right = locked ? 'LOCKED' : best ? stars : 'NEW';
+        Hud.text(ctx, right, x0 + pw - 12, mid + 4, { size: 12, align: 'right', color: locked ? col : best ? HUD_AMBER : '#9fb4c0' });
+      } else {
+        Hud.text(ctx, m.title, x0 + 40, mid - (small ? 1 : 3), { size: small ? 12 : 15, color: col });
+        Hud.text(ctx, (m.night ? 'NIGHT - ' : '') + THEATRES[m.theatre].label, x0 + 40, mid + (small ? 13 : 15), { size: 11, color: locked ? col : '#9fb4c0' });
+        const right = locked ? 'LOCKED' : best ? `BEST ${best}` : 'NOT CLEARED';
+        Hud.text(ctx, right, x0 + pw - 12, mid + (best ? 13 : 5), { size: small ? 10 : 12, align: 'right', color: locked ? col : best ? HUD_GREEN : '#9fb4c0' });
+        if (best) Hud.text(ctx, stars, x0 + pw - 12, mid - 3, { size: small ? 14 : 17, align: 'right', color: HUD_AMBER });
+      }
       hits.push({ kind: 'row', i, x: x0, y: ry, w: pw, h: rowH - 4 });
     });
 
     // Buttons.
-    const by = y + MISSIONS.length * rowH + 10;
+    const by = y + MISSIONS.length * rowH + (short ? 4 : 10);
+    const bh = short ? 30 : 32;
     const btn = (label, kind, bx, bw, color) => {
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.5;
-      ctx.strokeRect(bx, by, bw, 32);
-      Hud.text(ctx, label, bx + bw / 2, by + 21, { size: 14, align: 'center', color });
-      hits.push({ kind, x: bx, y: by, w: bw, h: 32 });
+      ctx.strokeRect(bx, by, bw, bh);
+      Hud.text(ctx, label, bx + bw / 2, by + bh / 2 + 5, { size: short ? 13 : 14, align: 'center', color });
+      hits.push({ kind, x: bx, y: by, w: bw, h: bh });
     };
-    const bw = Math.min(170, (pw - 20) / 3);
+    const gap = 8, bw = (pw - gap * 3) / 4;
     btn('BACK', 'back', x0, bw, '#c8d6dc');
-    btn('WORKSHOP', 'workshop', x0 + (pw - bw) / 2, bw, '#5ec8ff');
+    btn('WORKSHOP', 'workshop', x0 + bw + gap, bw, '#5ec8ff');
+    btn('SETTINGS', 'settings', x0 + (bw + gap) * 2, bw, '#c8d6dc');
     btn('LAUNCH', 'launch', x0 + pw - bw, bw, HUD_GREEN);
-    if (!Input.touchMode) {
-      Hud.text(ctx, '↑↓ MISSION   ←→ DIFFICULTY   SPACE LAUNCH   U WORKSHOP   ESC BACK', w / 2, Math.min(h - 14, by + 58), { size: 12, align: 'center', color: '#9fb4c0' });
+    if (!Input.touchMode && by + 58 < h) {
+      Hud.text(ctx, '↑↓ MISSION   ←→ DIFFICULTY   SPACE LAUNCH   U WORKSHOP   O SETTINGS   ESC BACK', w / 2, by + 58, { size: 12, align: 'center', color: '#9fb4c0' });
     }
     this.menuHits = hits;
   },
@@ -736,9 +914,17 @@ const G = {
     if (s === 'won') {
       this.result = 'won';
       this.score += 1000 * ((this.missionIndex % MISSIONS.length) + 1);
+      // Bonus stars: one for beating par time, one for losing less than half your armour.
+      const p = this.player;
+      this.bonuses = [
+        { label: `Under par time (${fmtTime(this.mission.par)})`, got: this.missionTime <= this.mission.par },
+        { label: 'Lost less than half your armour', got: this.damageTaken < p.maxHp * 0.5 },
+      ];
+      for (const b of this.bonuses) if (b.got) this.score += BONUS_STAR;
+      this.lastStars = 1 + this.bonuses.filter((b) => b.got).length;
       this.saveBest();
       this.lastEarned = this.score - this.missionStartScore;
-      Save.cleared(this.missionIndex, this.lastEarned);
+      Save.cleared(this.missionIndex, this.lastEarned, this.lastStars);
       this.banner('MISSION COMPLETE', HUD_AMBER);
       this.setState('complete');
     } else if (s === 'lost') {
@@ -761,7 +947,19 @@ const G = {
     if (!p.dead) p.update(dt, this, c);
     this.lockTarget = p.dead ? null : this.computeLock(c);
 
-    for (const e of this.enemies) if (!e.dead) e.update(dt, this);
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      e.update(dt, this);
+      // Badly damaged units trail smoke, and catch fire when nearly finished.
+      const hpf = e.hp / e.maxHp;
+      if (hpf < 0.45 && Math.random() < dt * (e.air ? 14 : 7)) {
+        this.particles.push(new Particle(e.x + rand(-5, 5), e.y + rand(-5, 5), rand(-10, 10), rand(-10, 10), rand(1, 1.8), rand(4, 7), 12, 'smoke'));
+        if (hpf < 0.2) this.particles.push(new Particle(e.x + rand(-4, 4), e.y + rand(-4, 4), 0, 0, 0.3, rand(3, 6), 4, 'fire'));
+      }
+    }
+    this.updateDelayed(dt);
+    for (const f of this.friendlies) if (!f.dead) f.update(dt, this);
+    if (this.state === 'play' && this.mission.update) this.mission.update(this, dt);
     for (const b of this.bullets) b.update(dt);
     for (const b of this.ebullets) b.update(dt);
     for (const m of this.missiles) if (!m.dead) m.update(dt, this);
@@ -781,6 +979,7 @@ const G = {
     this.collide();
 
     this.enemies = this.enemies.filter((e) => !e.dead);
+    this.friendlies = this.friendlies.filter((f) => !f.dead || f.keep);
     this.bullets = this.bullets.filter((b) => !b.dead);
     this.ebullets = this.ebullets.filter((b) => !b.dead);
     this.missiles = this.missiles.filter((m) => !m.dead);
@@ -795,21 +994,28 @@ const G = {
 
     if (this.state === 'play') this.reinforce(dt);
 
-    // Missile warning
-    this.missileWarning = false;
+    // Missile warning: the lock tone speeds up and rises in pitch as the nearest missile closes.
+    this.threats = [];
     if (!p.dead) {
       for (const m of this.missiles) {
-        if (m.owner === 'e' && m.target === p && dist2(m.x, m.y, p.x, p.y) < 1000 * 1000) {
-          this.missileWarning = true;
-          break;
+        if (m.owner === 'e' && m.target === p) {
+          const d = dist(m.x, m.y, p.x, p.y);
+          if (d < 1400) this.threats.push({ a: Math.atan2(m.y - p.y, m.x - p.x), d });
         }
       }
     }
+    const nearest = this.threats.reduce((n, t) => Math.min(n, t.d), Infinity);
+    this.missileWarning = nearest < 1000;
     this.warnBeepT -= dt;
     if (this.missileWarning && this.warnBeepT <= 0) {
-      this.warnBeepT = 0.35;
-      Sfx.beep();
+      const near = 1 - nearest / 1000;
+      this.warnBeepT = 0.08 + 0.4 * (1 - near);
+      Sfx.lockTone(near);
     }
+    for (const hm of this.hitMarks) hm.t -= dt * 1.1;
+    this.hitMarks = this.hitMarks.filter((hm) => hm.t > 0).slice(-8);
+    this.hurtFlash = Math.max(0, this.hurtFlash - dt * 1.8);
+    if (this.state === 'play') this.missionTime += dt;
 
     // Camera leads toward where you are aiming and flying.
     if (!p.dead) {
@@ -862,6 +1068,10 @@ const G = {
           const rr = e.r + 8;
           if (dist2(m.x, m.y, e.x, e.y) < rr * rr) {
             m.dead = true;
+            if (m.cluster) {
+              this.clusterBurst(m.x, m.y);
+              break;
+            }
             this.explode(m.x, m.y, 24);
             e.hurt(m.dmg, this);
             for (const o of this.enemies) {
@@ -879,7 +1089,19 @@ const G = {
         if (!p.dead && dist2(m.x, m.y, p.x, p.y) < p.r * p.r) {
           m.dead = true;
           this.explode(m.x, m.y, 22);
-          p.damage(m.dmg, this);
+          p.damage(m.dmg, this, m.angle + Math.PI);
+        }
+      }
+    }
+
+    for (const b of this.ebullets) {
+      if (b.dead) continue;
+      for (const f of this.friendlies) {
+        if (!f.dead && f.solid && dist2(b.x, b.y, f.x, f.y) < f.r * f.r) {
+          b.dead = true;
+          f.hurt(b.dmg, this);
+          this.particles.push(new Particle(b.x, b.y, rand(-60, 60), rand(-60, 60), 0.25, 1, 0, 'spark'));
+          break;
         }
       }
     }
@@ -889,7 +1111,7 @@ const G = {
       for (const b of this.ebullets) {
         if (!b.dead && dist2(b.x, b.y, p.x, p.y) < rr) {
           b.dead = true;
-          p.damage(b.dmg, this);
+          p.damage(b.dmg, this, Math.atan2(-b.vy, -b.vx));
           this.particles.push(new Particle(b.x, b.y, rand(-60, 60), rand(-60, 60), 0.25, 1, 0, 'spark'));
         }
       }
@@ -900,6 +1122,9 @@ const G = {
           if (pk.kind === 'repair') { p.hp = Math.min(p.maxHp, p.hp + 30); this.floaters.push({ x: pk.x, y: pk.y, text: 'ARMOR +30', t: 1.2 }); }
           if (pk.kind === 'missiles') { p.missiles = Math.min(p.maxMissiles, p.missiles + 4); this.floaters.push({ x: pk.x, y: pk.y, text: 'MISSILES +4', t: 1.2 }); }
           if (pk.kind === 'flares') { p.flares = Math.min(p.maxFlares, p.flares + 2); this.floaters.push({ x: pk.x, y: pk.y, text: 'FLARES +2', t: 1.2 }); }
+          if (pk.kind === 'guns') { p.gunBoostT = 15; this.banner('DOUBLE GUNS', PICKUP_COLORS.guns); }
+          if (pk.kind === 'shield') { p.shieldT = 10; this.banner('SHIELD UP', PICKUP_COLORS.shield); }
+          if (pk.kind === 'cluster') { p.clusters = Math.min(3, p.clusters + 1); this.banner('CLUSTER BOMB READY', PICKUP_COLORS.cluster); }
         }
       }
     }
@@ -949,6 +1174,7 @@ const G = {
     this.drawBase(ctx);
     if (this.checkpoint) this.drawCheckpoint(ctx);
 
+    for (const f of this.friendlies) if (!f.dead && inView(f)) f.draw(ctx);
     for (const pk of this.pickups) if (inView(pk)) pk.draw(ctx);
     for (const e of this.enemies) if (!e.air && inView(e)) e.draw(ctx);
 
@@ -989,6 +1215,10 @@ const G = {
       case 'hangar': this.drawHangar(ctx); break;
       case 'missions': this.drawMissions(ctx); break;
       case 'workshop': this.drawWorkshop(ctx); break;
+      case 'settings':
+        if (this.prefs.from === 'title') this.dim(ctx, 0.3);
+        this.drawSettings(ctx);
+        break;
       case 'controls':
         if (this.menu.from === 'title') this.dim(ctx, 0.3);
         this.drawControls(ctx);
@@ -1003,7 +1233,7 @@ const G = {
             Hud.crosshair(ctx, s.x, s.y, !!this.lockTarget);
           } else Hud.crosshair(ctx, Input.mouse.x, Input.mouse.y, !!this.lockTarget);
         }
-        if (this.state === 'paused') this.drawCenterPanel(ctx, 'PAUSED', [`${Input.bindLabel('pause')} or tap to resume`, 'C  controls / key bindings', `${Input.bindLabel('mute')}  toggles sound`]);
+        if (this.state === 'paused') this.drawCenterPanel(ctx, 'PAUSED', [`${Input.bindLabel('pause')} or tap to resume`, 'C  controls / key bindings', 'O  settings', `${Input.bindLabel('mute')}  toggles sound`]);
         if (this.state === 'complete') this.drawComplete(ctx);
         if (this.state === 'failed') this.drawFailed(ctx);
     }
@@ -1096,7 +1326,7 @@ const G = {
         `${Input.bindLabel('missile')} / RIGHT CLICK  missiles`,
         `${Input.bindLabel('turbo')}  turbo     ${Input.bindLabel('flare')}  flares     ${Input.bindLabel('pause')}  pause`,
         'Hover over the base pad to repair & rearm',
-        'C  change controls',
+        'C  change controls     O  settings',
       ];
     let y = h * 0.58;
     for (const l of lines) {
@@ -1139,8 +1369,11 @@ const G = {
     const spin = -Math.PI / 2 + Math.sin(this.time * 0.6) * 0.5;
     const rotor = this.time * 30;
     const vs = (sc * 20) / v.r; // fit big and small airframes to the same pad
+    const locked = vehicleLocked(v);
     v.draw(ctx, w / 2 + 8 * sc, cy + 10 * sc, spin, rotor, { shadow: true, scale: vs * 0.92 });
-    v.draw(ctx, w / 2, cy, spin, rotor, { ...v.colors, scale: vs });
+    // A locked aircraft shows only as a dark silhouette.
+    if (locked) v.draw(ctx, w / 2, cy, spin, rotor, { body: '#0c0e10', dark: '#0c0e10', accent: '#0c0e10', glass: '#0c0e10', scale: vs });
+    else v.draw(ctx, w / 2, cy, spin, rotor, { ...v.colors, scale: vs });
 
     // Arrows either side.
     const ax = Math.min(w * 0.38, 280);
@@ -1192,6 +1425,10 @@ const G = {
       ctx.fill();
     });
 
+    if (locked) {
+      Hud.text(ctx, `LOCKED - CLEAR ALL ${MISSIONS.length} MISSIONS TO UNLOCK`, w / 2, y + (small ? 18 : 22), { size: small ? 12 : 15, align: 'center', color: HUD_RED });
+      y += small ? 12 : 16;
+    }
     const prompt = Input.touchMode
       ? 'TAP THE SIDES TO CHOOSE - TAP THE MIDDLE TO CONTINUE'
       : '\u2190 \u2192 CHOOSE    SPACE / CLICK CONTINUE    ESC BACK';
@@ -1298,8 +1535,10 @@ const G = {
     this.dim(ctx, 0.55);
     const w = this.w, h = this.h;
     const small = w < 600;
-    Hud.text(ctx, title, w / 2, h * 0.4, { size: small ? 26 : 42, align: 'center', font: TITLE_FONT, weight: '900', color });
-    let y = h * 0.4 + 44;
+    // Long panels start higher so the last line stays on screen.
+    const top = Math.max(small ? 40 : 60, Math.min(h * 0.4, h - 64 - lines.length * 24));
+    Hud.text(ctx, title, w / 2, top, { size: small ? 26 : 42, align: 'center', font: TITLE_FONT, weight: '900', color });
+    let y = top + 44;
     for (const l of lines) {
       Hud.text(ctx, l, w / 2, y, { size: small ? 13 : 16, align: 'center', color: '#d6e2e8' });
       y += 24;
@@ -1309,15 +1548,22 @@ const G = {
   drawComplete(ctx) {
     if (this.stateT < 1) return;
     const last = (this.missionIndex + 1) % MISSIONS.length === 0;
-    const lines = [`Score ${this.score}`, `Kills this mission: ${this.kills}`, `Earned ${this.lastEarned}   Funds ${Save.data.funds}`, ''];
-    if (last) lines.unshift('The militia air force is finished. Skywatch has a new tour for you.');
+    const lines = [
+      starString(this.lastStars) + `   Time ${fmtTime(this.missionTime)}`,
+      ...this.bonuses.map((b) => `${b.got ? '★' : '☆'} ${b.label}${b.got ? '  +' + BONUS_STAR : ''}`),
+      '',
+      `Score ${this.score}   Kills ${this.kills}`, `Earned ${this.lastEarned}   Funds ${Save.data.funds}`, '',
+    ];
+    if (last) {
+      lines.unshift('The militia is finished. Skywatch has a new tour for you.', 'NEW AIRCRAFT IN THE HANGAR: VIPER');
+    }
     lines.push('PRESS SPACE / TAP FOR THE WORKSHOP');
     this.drawCenterPanel(ctx, last ? 'CAMPAIGN COMPLETE' : 'MISSION COMPLETE', lines);
   },
 
   drawFailed(ctx) {
     const title = this.result === 'down' ? `${this.vehicle.name} DOWN` : 'MISSION FAILED';
-    const why = this.result === 'down' ? 'Your armor gave out.' : 'Too many trucks crossed the border.';
+    const why = this.result === 'down' ? 'Your armor gave out.' : this.mission.failText || 'The objective was lost.';
     this.drawCenterPanel(ctx, title, [why, '', 'PRESS SPACE / TAP TO RETRY'], HUD_RED);
   },
 };

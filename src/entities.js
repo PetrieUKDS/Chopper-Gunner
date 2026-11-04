@@ -399,6 +399,119 @@ function drawScout(ctx, x, y, angle, rotor, o) {
   ctx.restore();
 }
 
+// Compound jet-copter: dart fuselage, swept wings carrying two ducted lift fans,
+// a jet nozzle at the tail and a nose-mounted laser. No main rotor.
+function drawViper(ctx, x, y, angle, rotor, o) {
+  const s = o.scale || 1;
+  const shadow = !!o.shadow, f = !!o.flash;
+  const sil = 'rgba(0,0,0,0.22)';
+  const lit = (r, c) => (shadow ? sil : litFill(ctx, angle, r, c, f));
+  const outline = () => {
+    if (!shadow) outlinePath(ctx);
+  };
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.scale(s, s);
+
+  // Swept wings.
+  ctx.fillStyle = lit(14, o.dark);
+  ctx.beginPath();
+  ctx.moveTo(8, -4); ctx.lineTo(-8, -26); ctx.lineTo(-16, -26); ctx.lineTo(-10, -4);
+  ctx.lineTo(-10, 4); ctx.lineTo(-16, 26); ctx.lineTo(-8, 26); ctx.lineTo(8, 4);
+  ctx.closePath();
+  ctx.fill();
+  outline();
+
+  // Ducted fans in the wing roots: a ring, and spinning blades inside.
+  for (const side of [-1, 1]) {
+    const fy = side * 18;
+    ctx.fillStyle = lit(9, o.body);
+    ctx.beginPath();
+    ctx.arc(-6, fy, 9.5, 0, TAU);
+    ctx.fill();
+    outline();
+    ctx.fillStyle = shadow ? sil : '#0d0f12';
+    ctx.beginPath();
+    ctx.arc(-6, fy, 7.2, 0, TAU);
+    ctx.fill();
+    if (!shadow) {
+      ctx.strokeStyle = 'rgba(190,200,210,0.55)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      for (let b = 0; b < 5; b++) {
+        const a = rotor * 1.6 * side + (b * TAU) / 5;
+        ctx.moveTo(-6, fy);
+        ctx.lineTo(-6 + Math.cos(a) * 6.6, fy + Math.sin(a) * 6.6);
+      }
+      ctx.stroke();
+      ctx.fillStyle = f ? '#ffffff' : o.accent;
+      ctx.beginPath();
+      ctx.arc(-6, fy, 1.8, 0, TAU);
+      ctx.fill();
+    }
+  }
+
+  // Tail fins and jet nozzle.
+  ctx.fillStyle = lit(6, o.dark);
+  ctx.beginPath();
+  ctx.moveTo(-22, -2); ctx.lineTo(-32, -11); ctx.lineTo(-35, -11); ctx.lineTo(-30, -2);
+  ctx.lineTo(-30, 2); ctx.lineTo(-35, 11); ctx.lineTo(-32, 11); ctx.lineTo(-22, 2);
+  ctx.closePath();
+  ctx.fill();
+  outline();
+  if (!shadow) {
+    const glow = o.turbo ? 22 : 9;
+    const gr = ctx.createRadialGradient(-34, 0, 0, -34, 0, glow);
+    gr.addColorStop(0, 'rgba(170,240,255,0.95)');
+    gr.addColorStop(0.4, o.turbo ? 'rgba(80,170,255,0.7)' : 'rgba(80,170,255,0.4)');
+    gr.addColorStop(1, 'rgba(40,80,255,0)');
+    ctx.fillStyle = gr;
+    ctx.beginPath();
+    ctx.arc(-36, 0, glow, 0, TAU);
+    ctx.fill();
+  }
+
+  // Dart fuselage.
+  ctx.fillStyle = lit(8, o.body);
+  ctx.beginPath();
+  ctx.moveTo(30, 0);
+  ctx.quadraticCurveTo(16, -6.5, 0, -6);
+  ctx.lineTo(-32, -3.4);
+  ctx.lineTo(-32, 3.4);
+  ctx.lineTo(0, 6);
+  ctx.quadraticCurveTo(16, 6.5, 30, 0);
+  ctx.fill();
+  outline();
+
+  if (!shadow) {
+    // Spine stripe, laser emitter and canopy.
+    ctx.fillStyle = f ? '#ffffff' : o.accent;
+    ctx.fillRect(-26, -1, 22, 2);
+    ctx.fillStyle = '#9ff0ff';
+    ctx.beginPath();
+    ctx.arc(30.5, 0, 1.6, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = glassFill(ctx, angle, 6, o.glass);
+    ctx.beginPath();
+    ctx.ellipse(13, 0, 8, 3.8, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.beginPath();
+    ctx.ellipse(15, -1.5, 3, 1, -0.3, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#ff3b30';
+    ctx.beginPath();
+    ctx.arc(-14, -25.5, 1.1, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#34d36a';
+    ctx.beginPath();
+    ctx.arc(-14, 25.5, 1.1, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 // Heavy tandem-rotor gunship: long armoured hull, stub wings with gun pods, two rotors.
 function drawHeavy(ctx, x, y, angle, rotor, o) {
   const s = o.scale || 1;
@@ -634,7 +747,18 @@ class Bullet {
     if (this.life <= 0) this.dead = true;
   }
   draw(ctx) {
-    if (this.owner === 'p') {
+    if (this.kind === 'laser') {
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(80,220,255,0.35)';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(this.x - this.vx * 0.03, this.y - this.vy * 0.03);
+      ctx.lineTo(this.x, this.y);
+      ctx.stroke();
+      ctx.strokeStyle = '#e8fcff';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+    } else if (this.owner === 'p') {
       ctx.strokeStyle = '#ffe9a0';
       ctx.lineWidth = 2.2;
       ctx.beginPath();
@@ -668,6 +792,7 @@ class Missile {
     this.dead = false;
     this.trailT = 0;
     this.arm = 0.12; // brief unguided boost off the rail
+    this.cluster = !!o.cluster; // a cluster bomb flies straight and bursts into bomblets
   }
   update(dt, g) {
     this.arm -= dt;
@@ -689,13 +814,24 @@ class Missile {
     }
     if (this.life <= 0) {
       this.dead = true;
-      g.explode(this.x, this.y, 10);
+      if (this.cluster) g.clusterBurst(this.x, this.y);
+      else g.explode(this.x, this.y, 10);
     }
   }
   draw(ctx) {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
+    if (this.cluster) {
+      ctx.fillStyle = '#3a3f2c';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 9, 4.5, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = '#ff5ad2';
+      ctx.fillRect(-9, -4, 3, 8);
+      ctx.restore();
+      return;
+    }
     ctx.fillStyle = this.owner === 'p' ? '#e8e8e8' : '#d9d2c0';
     ctx.fillRect(-7, -1.8, 13, 3.6);
     ctx.fillStyle = this.owner === 'p' ? '#2a2a2a' : '#b83020';
@@ -808,6 +944,13 @@ class Particle {
         ctx.arc(this.x, this.y, this.size, 0, TAU);
         ctx.fill();
         break;
+      case 'ring':
+        ctx.strokeStyle = `rgba(255,226,170,${0.7 * t})`;
+        ctx.lineWidth = 2 + 6 * t;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, TAU);
+        ctx.stroke();
+        break;
       case 'flash': {
         const gr = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size);
         gr.addColorStop(0, `rgba(255,250,230,${t})`);
@@ -821,6 +964,11 @@ class Particle {
     }
   }
 }
+
+const PICKUP_COLORS = {
+  repair: '#4cd47a', missiles: '#ffb02e', flares: '#5ec8ff',
+  guns: '#ff6a3a', shield: '#b48cff', cluster: '#ff5ad2',
+};
 
 class Pickup {
   constructor(x, y, kind) {
@@ -837,8 +985,8 @@ class Pickup {
   draw(ctx) {
     if (this.life < 4 && Math.floor(this.t * 8) % 2) return;
     const s = 1 + Math.sin(this.t * 4) * 0.08;
-    const col = { repair: '#4cd47a', missiles: '#ffb02e', flares: '#5ec8ff' }[this.kind];
-    const label = { repair: '+', missiles: 'M', flares: 'F' }[this.kind];
+    const col = PICKUP_COLORS[this.kind];
+    const label = { repair: '+', missiles: 'M', flares: 'F', guns: '2x', shield: 'S', cluster: 'C' }[this.kind];
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.scale(s, s);
@@ -854,7 +1002,7 @@ class Pickup {
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = col;
-    ctx.font = `bold 16px ${FONT}`;
+    ctx.font = `bold ${label.length > 1 ? 13 : 16}px ${FONT}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, 0, 1);
@@ -916,7 +1064,30 @@ const VEHICLES = {
     gun: { x: 30, y: 24, cd: 0.075, dmg: 10, heat: 3 },
     missileMount: { x: 10, y: 16 },
   },
+  // Unlocked by clearing the last mission of the campaign.
+  viper: {
+    name: 'VIPER',
+    role: 'PROTOTYPE JET-COPTER',
+    blurb: 'Skywatch\'s reward: jet speed, ducted-fan agility and a long-range laser that runs cool.',
+    draw: drawViper,
+    colors: { body: '#262b33', dark: '#161a20', accent: '#3fd8ff', glass: '#1f4a5c' },
+    unlock: 'campaign',
+    r: 19,
+    hp: 95,
+    missiles: 6,
+    flares: 5,
+    speed: 360,
+    turboSpeed: 780,
+    turn: 8.5,
+    // Laser bolts: fast, long-ranged and cool-running.
+    gun: { x: 31, y: 3, cd: 0.065, dmg: 8.5, heat: 1.6, speed: 1500, range: 860, kind: 'laser' },
+    missileMount: { x: 0, y: 14 },
+  },
 };
+
+function vehicleLocked(v) {
+  return v.unlock === 'campaign' && !Save.data.campaignDone;
+}
 
 class Player {
   // mods: workshop upgrade levels and difficulty, e.g. { armor: 1, racks: 2, hurt: 0.65 }.
@@ -943,6 +1114,9 @@ class Player {
     this.rearmT = 0;
     this.onPad = false;
     this.dead = false;
+    this.gunBoostT = 0; // seconds of double guns left
+    this.shieldT = 0; // seconds of shield left
+    this.clusters = 0; // cluster bombs carried; the missile button drops these first
   }
 
   update(dt, g, c) {
@@ -965,6 +1139,8 @@ class Player {
     this.rotor += dt * (this.turboOn ? 52 : 40);
 
     this.gunCd -= dt; this.misCd -= dt; this.flareCd -= dt; this.hitFlash -= dt;
+    this.gunBoostT = Math.max(0, this.gunBoostT - dt);
+    this.shieldT = Math.max(0, this.shieldT - dt);
     this.heat = Math.max(0, this.heat - 26 * dt);
     if (this.overheat && this.heat < 35) this.overheat = false;
 
@@ -979,23 +1155,33 @@ class Player {
         this.overheat = true;
         Sfx.overheat();
       }
-      this.gunSide *= -1;
-      const ox = this.x + ca * gun.x - sa * gun.y * this.gunSide;
-      const oy = this.y + sa * gun.x + ca * gun.y * this.gunSide;
-      let a = this.angle;
-      // Keyboard players get a little help: rounds bend onto a target that is nearly dead ahead.
-      const t = g.lockTarget;
-      if (c.assist && t) {
-        const ta = Math.atan2(t.y - oy, t.x - ox);
-        if (Math.abs(angDiff(this.angle, ta)) < 0.22) a = ta;
+      // Double guns fire from both sides at once.
+      for (let k = this.gunBoostT > 0 ? 2 : 1; k > 0; k--) {
+        this.gunSide *= -1;
+        const ox = this.x + ca * gun.x - sa * gun.y * this.gunSide;
+        const oy = this.y + sa * gun.x + ca * gun.y * this.gunSide;
+        let a = this.angle;
+        // Keyboard players get a little help: rounds bend onto a target that is nearly dead ahead.
+        const t = g.lockTarget;
+        if (c.assist && t) {
+          const ta = Math.atan2(t.y - oy, t.x - ox);
+          if (Math.abs(angDiff(this.angle, ta)) < 0.22) a = ta;
+        }
+        a += rand(-0.035, 0.035);
+        const sp = gun.speed || 980;
+        g.bullets.push(new Bullet(ox, oy, Math.cos(a) * sp + this.vx * 0.5, Math.sin(a) * sp + this.vy * 0.5, 'p', gun.dmg, (gun.range || 690) / sp, gun.kind));
+        g.particles.push(new Particle(ox, oy, this.vx, this.vy, 0.05, 5, 0, 'muzzle'));
       }
-      a += rand(-0.035, 0.035);
-      g.bullets.push(new Bullet(ox, oy, Math.cos(a) * 980 + this.vx * 0.5, Math.sin(a) * 980 + this.vy * 0.5, 'p', gun.dmg, 0.7));
-      g.particles.push(new Particle(ox, oy, this.vx, this.vy, 0.05, 5, 0, 'muzzle'));
-      Sfx.gun();
+      Sfx.gun(gun.kind);
     }
 
-    if (c.missile && this.misCd <= 0 && this.missiles > 0) {
+    if (c.missile && this.misCd <= 0 && this.clusters > 0) {
+      this.misCd = 0.6;
+      this.clusters--;
+      g.missiles.push(new Missile(this.x + ca * 10, this.y + sa * 10, this.angle, 'p', null,
+        { speed: 320, maxSpeed: 520, accel: 300, turn: 0, dmg: 30, life: 0.75, cluster: true }));
+      Sfx.missile();
+    } else if (c.missile && this.misCd <= 0 && this.missiles > 0) {
       this.misCd = 0.4;
       this.missiles--;
       this.misSide *= -1;
@@ -1044,9 +1230,18 @@ class Player {
     }
   }
 
-  damage(n, g) {
+  // from: world angle the hit came from, for the HUD's damage-direction markers.
+  damage(n, g, from) {
     if (this.dead || g.state !== 'play') return;
+    if (from !== undefined) g.hitMarks.push({ a: from, t: 1 });
+    if (this.shieldT > 0) {
+      // The shield pickup soaks up hits while it lasts.
+      g.particles.push(new Particle(this.x + Math.cos(from || 0) * this.r * 1.6, this.y + Math.sin(from || 0) * this.r * 1.6, 0, 0, 0.25, 10, 30, 'flash'));
+      return;
+    }
     this.hp -= n * this.hurtMult;
+    g.damageTaken += n * this.hurtMult;
+    g.hurtFlash = Math.min(1, g.hurtFlash + 0.25 + n / 60);
     this.hitFlash = 0.12;
     g.shake(5);
     Sfx.hit();
@@ -1100,14 +1295,32 @@ class Enemy {
     if (!this.air) {
       g.terrain.addDecal({ type: 'wreck', x: this.x, y: this.y, angle: this.angle, w: this.r * 1.6, h: this.r });
       g.emitters.push({ x: this.x, y: this.y, life: 7 });
+    } else {
+      // Aircraft come down a little way ahead and leave a burning hulk, unless over water.
+      const cx = this.x + Math.cos(this.angle) * this.r * 2, cy = this.y + Math.sin(this.angle) * this.r * 2;
+      if (isLand(cx, cy)) {
+        g.terrain.addDecal({ type: 'scorch', x: cx, y: cy, r: this.r * 2.2 });
+        g.terrain.addDecal({ type: 'wreck', x: cx, y: cy, angle: this.angle, w: this.r * 1.5, h: this.r * 0.9 });
+        g.emitters.push({ x: cx, y: cy, life: 9 });
+      }
     }
     g.addScore(this.score, this.x, this.y);
     g.kills++;
     g.maybeDrop(this.x, this.y);
   }
+  // The target to aim at: the player, or a friendly unit (convoy truck, base HQ) that is
+  // clearly closer and within 900px.
   toPlayer(g) {
     const p = g.player;
-    return { dx: p.x - this.x, dy: p.y - this.y, d: dist(p.x, p.y, this.x, this.y), a: Math.atan2(p.y - this.y, p.x - this.x) };
+    let tx = p.x, ty = p.y, d = dist(p.x, p.y, this.x, this.y);
+    for (const f of g.friendlies) {
+      if (f.dead || !f.solid) continue;
+      const fd = dist(f.x, f.y, this.x, this.y);
+      if (fd < 900 && fd < d * 0.8) {
+        tx = f.x; ty = f.y; d = fd;
+      }
+    }
+    return { dx: tx - this.x, dy: ty - this.y, d, a: Math.atan2(ty - this.y, tx - this.x) };
   }
   // Ground units stay on land: blocked moves turn them away from the water.
   groundMove(step) {
@@ -1305,7 +1518,8 @@ class Truck extends Enemy {
       drawWheel(ctx, wx, 7.5, 7, 3);
     }
     // Cab with windscreen and roof hatch.
-    ctx.fillStyle = litFill(ctx, this.angle, 9, shade(THEATRE.camo.main, -0.12), f);
+    const paint = this.paint || THEATRE.camo;
+    ctx.fillStyle = litFill(ctx, this.angle, 9, shade(paint.main, -0.12), f);
     ctx.beginPath();
     ctx.roundRect(11, -8, 13, 16, 2.5);
     ctx.fill();
@@ -1317,7 +1531,7 @@ class Truck extends Enemy {
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.fillRect(13.5, -2.5, 4, 5);
     // Canvas-covered cargo bed, sagging between its hoops.
-    ctx.fillStyle = litFill(ctx, this.angle, 10, THEATRE.camo.cover, f);
+    ctx.fillStyle = litFill(ctx, this.angle, 10, paint.cover, f);
     ctx.beginPath();
     ctx.roundRect(-22, -9, 32, 18, 2.5);
     ctx.fill();
@@ -1665,6 +1879,14 @@ class Boss extends Gunship {
       g.particles.push(new Particle(this.x - Math.cos(this.angle) * 30, this.y - Math.sin(this.angle) * 30, 0, 0, 0.4, 8, 20, 'fire'));
     }
   }
+  die(g) {
+    super.die(g);
+    for (let i = 1; i <= 9; i++) {
+      g.delayed.push({ t: i * 0.2, x: this.x + rand(-60, 60), y: this.y + rand(-60, 60), size: rand(30, 55) });
+    }
+    g.delayed.push({ t: 2, x: this.x, y: this.y, size: 110, ring: true });
+    g.banner('RED TALON DOWN', HUD_AMBER);
+  }
   attack(dt, g, t, engaged) {
     this.cd -= dt;
     this.burstT -= dt;
@@ -1833,7 +2055,7 @@ class FuelDepot extends Enemy {
       if (o !== this && !o.dead && dist2(o.x, o.y, this.x, this.y) < 170 * 170) o.hurt(45, g);
     }
     const p = g.player;
-    if (!p.dead && dist2(p.x, p.y, this.x, this.y) < 110 * 110) p.damage(12, g);
+    if (!p.dead && dist2(p.x, p.y, this.x, this.y) < 110 * 110) p.damage(12, g, Math.atan2(this.y - p.y, this.x - p.x));
     g.emitters.push({ x: this.x + 10, y: this.y - 6, life: 14 });
   }
   draw(ctx) {
@@ -2249,5 +2471,187 @@ class Bunker extends Enemy {
     }
     ctx.restore();
     this.drawHealth(ctx);
+  }
+}
+
+// ---------------------------------------------------------------- friendly units
+
+// Aid convoy truck for the escort mission: drives the route, and counts as delivered
+// at the end of it. Enemies shoot at it; the player's guns pass over it.
+class AidTruck extends Truck {
+  constructor(path, startDist) {
+    super(path, startDist, 1);
+    this.hp = this.maxHp = 110;
+    this.objective = false;
+    this.solid = true;
+    this.speed = 44;
+    this.waitT = 5; // the convoy waits a moment so you can get ahead of it
+    this.paint = { main: '#e4e8ec', cover: '#3f78c8' };
+  }
+  update(dt, g) {
+    this.hitFlash -= dt;
+    this.waitT -= dt;
+    const t = this.path[this.seg];
+    if (!t || this.waitT > 0) return;
+    if (Math.hypot(t.x - this.x, t.y - this.y) < 20) {
+      this.seg++;
+      if (this.seg >= this.path.length) {
+        this.dead = true;
+        this.gone = true;
+        g.delivered++;
+        g.banner('AID TRUCK DELIVERED', HUD_GREEN);
+      }
+      return;
+    }
+    this.angle = turnToward(this.angle, Math.atan2(t.y - this.y, t.x - this.x), 3 * dt);
+    this.x += Math.cos(this.angle) * this.speed * dt;
+    this.y += Math.sin(this.angle) * this.speed * dt;
+  }
+  die(g) {
+    g.explode(this.x, this.y, this.boom, { ground: true });
+    g.terrain.addDecal({ type: 'wreck', x: this.x, y: this.y, angle: this.angle, w: this.r * 1.6, h: this.r });
+    g.emitters.push({ x: this.x, y: this.y, life: 10 });
+    g.convoyLost++;
+    g.banner('AID TRUCK LOST', HUD_RED);
+  }
+  draw(ctx) {
+    super.draw(ctx);
+    // Red cross on the canvas roof.
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    ctx.fillStyle = '#e8ecef';
+    ctx.fillRect(-12, -5, 10, 10);
+    ctx.fillStyle = '#d8262a';
+    ctx.fillRect(-11, -1.2, 8, 2.4);
+    ctx.fillRect(-8.2, -4, 2.4, 8);
+    ctx.restore();
+  }
+}
+
+// Downed aircrew for the rescue mission. Hover slowly over them to take them aboard;
+// militia search jeeps capture them if they get there first.
+class Survivor {
+  constructor(x, y) {
+    this.x = x; this.y = y;
+    this.r = 10;
+    this.t = rand(0, 10);
+    this.holdT = 0;
+    this.dead = false;
+    this.solid = false; // enemies don't shoot at them
+    this.speed = 0; // so search jeeps can use them as a destination
+  }
+  update(dt, g) {
+    this.t += dt;
+    const p = g.player;
+    const slow = Math.hypot(p.vx, p.vy) < 130;
+    if (!p.dead && slow && dist2(p.x, p.y, this.x, this.y) < 75 * 75) {
+      this.holdT += dt;
+      if (this.holdT >= 1.2) {
+        this.dead = true;
+        g.carrying++;
+        Sfx.pickup();
+        g.banner('CREW ABOARD - RETURN TO BASE', HUD_GREEN);
+      }
+    } else this.holdT = Math.max(0, this.holdT - dt * 2);
+    for (const e of g.enemies) {
+      if (!e.dead && e.hunter && dist2(e.x, e.y, this.x, this.y) < 30 * 30) {
+        this.dead = true;
+        g.captured++;
+        g.banner('CREW CAPTURED', HUD_RED);
+        break;
+      }
+    }
+  }
+  draw(ctx) {
+    // Orange signal smoke drifting off, a beacon ring, the waving crewman, and a ring
+    // that fills while you pick them up.
+    for (let i = 0; i < 4; i++) {
+      const k = (this.t * 0.35 + i / 4) % 1;
+      ctx.fillStyle = `rgba(255,130,40,${0.32 * (1 - k)})`;
+      ctx.beginPath();
+      ctx.arc(this.x + 10 + k * 46, this.y - 6 - k * 30, 6 + k * 16, 0, TAU);
+      ctx.fill();
+    }
+    const pulse = (this.t * 0.8) % 1;
+    ctx.strokeStyle = `rgba(255,150,50,${0.9 * (1 - pulse)})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, 14 + pulse * 50, 0, TAU);
+    ctx.stroke();
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.scale(1.7, 1.7);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(2, 3, 6, 4, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#ff7a1a';
+    ctx.beginPath();
+    ctx.roundRect(-4, -3, 8, 7, 2);
+    ctx.fill();
+    ctx.fillStyle = '#e8c8a0';
+    ctx.beginPath();
+    ctx.arc(0, -4, 3, 0, TAU);
+    ctx.fill();
+    // Waving arm.
+    const wave = Math.sin(this.t * 8) * 0.6;
+    ctx.strokeStyle = '#ff7a1a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(3, -1);
+    ctx.lineTo(3 + Math.cos(-1 + wave) * 6, -1 + Math.sin(-1 + wave) * 6);
+    ctx.stroke();
+    ctx.restore();
+    if (this.holdT > 0) {
+      ctx.strokeStyle = HUD_GREEN;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, 26, -Math.PI / 2, -Math.PI / 2 + (this.holdT / 1.2) * TAU);
+      ctx.stroke();
+    }
+  }
+}
+
+// The base's command building for the defence mission. It sits where the hangar is
+// drawn, so it only adds damage effects and a health bar to the base picture.
+class BaseHQ {
+  constructor(x, y, hp) {
+    this.x = x; this.y = y;
+    this.r = 44;
+    this.hp = this.maxHp = hp;
+    this.hitFlash = 0;
+    this.dead = false;
+    this.solid = true;
+  }
+  hurt(n, g) {
+    if (this.dead) return;
+    this.hp -= n;
+    this.hitFlash = 0.08;
+    if (this.hp <= 0) {
+      this.hp = 0;
+      this.dead = true;
+      g.explode(this.x, this.y, 90, { ground: true, ring: true });
+      g.emitters.push({ x: this.x, y: this.y, life: 30 });
+    }
+  }
+  update(dt, g) {
+    this.hitFlash -= dt;
+    const f = this.hp / this.maxHp;
+    if (f < 0.6 && Math.random() < dt * (1 - f) * 12) {
+      g.particles.push(new Particle(this.x + rand(-35, 35), this.y + rand(-22, 22), rand(5, 15), rand(-10, -2), rand(1.5, 2.5), rand(6, 10), 12, 'smoke'));
+      if (f < 0.3) g.particles.push(new Particle(this.x + rand(-30, 30), this.y + rand(-20, 20), 0, 0, 0.4, rand(5, 9), 5, 'fire'));
+    }
+  }
+  draw(ctx) {
+    if (this.hitFlash > 0) {
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.fillRect(this.x - 45, this.y - 30, 90, 60);
+    }
+    const w = 90;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(this.x - w / 2, this.y - 44, w, 6);
+    ctx.fillStyle = this.hp > this.maxHp * 0.35 ? HUD_GREEN : HUD_RED;
+    ctx.fillRect(this.x - w / 2, this.y - 44, (w * this.hp) / this.maxHp, 6);
   }
 }

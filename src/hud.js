@@ -63,15 +63,34 @@ const Hud = {
       ctx.fill();
     }
 
-    // --- score
-    if (small) this.text(ctx, String(g.score).padStart(7, '0'), w - 78, 162, { size: 16, align: 'center', color: '#ffffff' });
-    else this.text(ctx, String(g.score).padStart(7, '0'), w / 2, 28, { size: 22, align: 'center', color: '#ffffff' });
+    // --- active power-ups
+    const ups = [];
+    if (p.gunBoostT > 0) ups.push([`2X GUNS ${Math.ceil(p.gunBoostT)}`, PICKUP_COLORS.guns]);
+    if (p.shieldT > 0) ups.push([`SHIELD ${Math.ceil(p.shieldT)}`, PICKUP_COLORS.shield]);
+    if (p.clusters > 0) ups.push([`CLUSTER x${p.clusters}`, PICKUP_COLORS.cluster]);
+    let ux = 16;
+    y += 20;
+    for (const [label, col] of ups) {
+      this.text(ctx, label, ux, y, { size: 12, color: col });
+      ux += ctx.measureText(label).width + 14;
+    }
+
+    // --- score, and the mission clock against par (green while you're still under it)
+    const clock = `${fmtTime(g.missionTime)} / PAR ${fmtTime(g.mission.par)}`;
+    const clockCol = g.missionTime <= g.mission.par ? HUD_GREEN : '#9fb4c0';
+    if (small) {
+      this.text(ctx, String(g.score).padStart(7, '0'), w - 78, 162, { size: 16, align: 'center', color: '#ffffff' });
+      this.text(ctx, clock, w - 78, 178, { size: 10, align: 'center', color: clockCol });
+    } else {
+      this.text(ctx, String(g.score).padStart(7, '0'), w / 2, 28, { size: 22, align: 'center', color: '#ffffff' });
+      this.text(ctx, clock, w / 2, 46, { size: 12, align: 'center', color: clockCol });
+    }
 
     // --- boss bar
     const boss = g.enemies.find((e) => e.isBoss && !e.dead && e.aware);
     if (boss) {
       const bw2 = Math.min(360, w - 260);
-      const by = small ? 190 : 50;
+      const by = small ? 196 : 66;
       this.text(ctx, boss.name, w / 2, by, { size: 12, align: 'center', color: HUD_RED });
       this.bar(ctx, w / 2 - bw2 / 2, by + 6, bw2, 8, boss.hp / boss.maxHp, HUD_RED);
     }
@@ -101,7 +120,56 @@ const Hud = {
     }
 
     this.edgeArrows(ctx, g);
+    this.threatRing(ctx, g);
     if (Input.touchMode) this.touchControls(ctx, g);
+  },
+
+  // Around the aircraft: red arcs on the side the last hits came from, red chevrons pointing
+  // at missiles homing in (brighter as they close), and a red edge glow after taking damage.
+  threatRing(ctx, g) {
+    const p = g.player;
+    if (g.hurtFlash > 0) {
+      const R = Math.hypot(g.w, g.h) / 2;
+      const gr = ctx.createRadialGradient(g.w / 2, g.h / 2, R * 0.55, g.w / 2, g.h / 2, R);
+      gr.addColorStop(0, 'rgba(255,40,20,0)');
+      gr.addColorStop(1, `rgba(255,40,20,${0.45 * g.hurtFlash})`);
+      ctx.fillStyle = gr;
+      ctx.fillRect(0, 0, g.w, g.h);
+    }
+    if (p.dead) return;
+    const s = g.worldToScreen(p.x, p.y);
+    const r0 = p.r * g.zoom + 22;
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (const hm of g.hitMarks) {
+      ctx.strokeStyle = `rgba(255,70,40,${hm.t * 0.9})`;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, r0, hm.a - 0.38, hm.a + 0.38);
+      ctx.stroke();
+    }
+    for (const t of g.threats) {
+      const near = clamp(1 - t.d / 1400, 0, 1);
+      const rr = r0 + 22;
+      ctx.save();
+      ctx.translate(s.x + Math.cos(t.a) * rr, s.y + Math.sin(t.a) * rr);
+      ctx.rotate(t.a);
+      ctx.fillStyle = `rgba(255,${(120 - near * 100) | 0},60,${0.45 + near * 0.55})`;
+      const k = 0.8 + near * 0.7;
+      ctx.beginPath();
+      ctx.moveTo(12 * k, 0); ctx.lineTo(-4 * k, -9 * k); ctx.lineTo(0, 0); ctx.lineTo(-4 * k, 9 * k);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    if (p.shieldT > 0) {
+      ctx.strokeStyle = `rgba(110,200,255,${0.35 + 0.25 * Math.sin(g.time * 8)})`;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, p.r * g.zoom * 1.7, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.restore();
   },
 
   radar(ctx, g, cx, cy, R) {
@@ -162,6 +230,9 @@ const Hud = {
         dot(e.x, e.y, e.air ? '#ff9a7a' : HUD_RED, e.air ? 2.5 : 2);
       }
     }
+    for (const f of g.friendlies) {
+      if (!f.dead) dot(f.x, f.y, f instanceof Survivor ? '#ff8c28' : '#5ec8ff', f instanceof BaseHQ ? 0 : 3);
+    }
     for (const m of g.missiles) if (m.owner === 'e') dot(m.x, m.y, '#ffffff', 1.5);
     for (const pk of g.pickups) dot(pk.x, pk.y, '#5ec8ff', 2);
     ctx.restore();
@@ -184,8 +255,15 @@ const Hud = {
 
   edgeArrows(ctx, g) {
     const targets = g.enemies.filter((e) => e.objective && !e.dead).map((e) => ({ x: e.x, y: e.y, col: HUD_AMBER }));
-    if (g.player.hp < 35 || (g.player.missiles === 0 && !g.player.onPad)) targets.push({ x: g.base.x, y: g.base.y, col: HUD_GREEN, label: 'BASE' });
-    if (g.checkpoint) targets.push({ x: g.checkpoint.x, y: g.checkpoint.y, col: '#ffffff', label: 'BORDER' });
+    for (const f of g.friendlies) {
+      if (f.dead) continue;
+      if (f instanceof Survivor) targets.push({ x: f.x, y: f.y, col: '#ff8c28', label: 'CREW' });
+      else if (f instanceof AidTruck) targets.push({ x: f.x, y: f.y, col: '#5ec8ff', label: 'AID' });
+    }
+    const needBase = g.player.hp < 35 || (g.player.missiles === 0 && !g.player.onPad) || g.carrying > 0
+      || (g.hq && !g.hq.dead && dist(g.player.x, g.player.y, g.base.x, g.base.y) > 900);
+    if (needBase) targets.push({ x: g.base.x, y: g.base.y, col: HUD_GREEN, label: 'BASE' });
+    if (g.checkpoint) targets.push({ x: g.checkpoint.x, y: g.checkpoint.y, col: '#ffffff', label: g.checkpointLabel });
     const m = 46;
     for (const t of targets) {
       const s = g.worldToScreen(t.x, t.y);

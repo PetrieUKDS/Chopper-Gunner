@@ -11,6 +11,10 @@ const Sfx = {
   rotorState: '',
   lastGun: 0,
   lastEnemyGun: 0,
+  musicVol: 0.7,
+  sfxVol: 0.8,
+  musicBus: null,
+  fx: null,
 
   init() {
     if (this.ctx) {
@@ -23,6 +27,13 @@ const Sfx = {
     this.master = ctx.createGain();
     this.master.gain.value = this.muted ? 0 : 0.5;
     this.master.connect(ctx.destination);
+    // Separate volume controls for the music and the sound effects, set from Settings.
+    this.musicBus = ctx.createGain();
+    this.musicBus.gain.value = this.musicVol;
+    this.musicBus.connect(this.master);
+    this.fx = ctx.createGain();
+    this.fx.gain.value = this.sfxVol;
+    this.fx.connect(this.master);
 
     const len = ctx.sampleRate * 2;
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -53,7 +64,7 @@ const Sfx = {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(gain, t + attack);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(flt).connect(g).connect(this.master);
+    src.connect(flt).connect(g).connect(this.fx);
     src.start(t, Math.random() * 1.5);
     src.stop(t + dur + 0.05);
   },
@@ -69,7 +80,7 @@ const Sfx = {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(gain, t + attack);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    osc.connect(g).connect(this.master);
+    osc.connect(g).connect(this.fx);
     osc.start(t);
     osc.stop(t + dur + 0.05);
   },
@@ -93,7 +104,7 @@ const Sfx = {
     lfo.connect(depth).connect(amp.gain);
     const vol = c.createGain();
     vol.gain.value = 0;
-    src.connect(flt).connect(amp).connect(vol).connect(this.master);
+    src.connect(flt).connect(amp).connect(vol).connect(this.fx);
     lfo.start();
     src.start();
     this.rotor = { vol, lfo, flt };
@@ -110,10 +121,14 @@ const Sfx = {
     this.rotor.flt.frequency.setTargetAtTime(turbo ? 700 : 380, t, 0.4);
   },
 
-  gun() {
+  gun(kind) {
     const t = performance.now();
     if (t - this.lastGun < 45) return;
     this.lastGun = t;
+    if (kind === 'laser') {
+      this.tone({ f0: 2200, f1: 500, dur: 0.07, type: 'sawtooth', gain: 0.05 });
+      return;
+    }
     this.noise({ dur: 0.07, type: 'bandpass', f0: 1900, f1: 600, q: 0.8, gain: 0.2 });
     this.tone({ f0: 170, f1: 60, dur: 0.05, type: 'square', gain: 0.04 });
   },
@@ -155,6 +170,18 @@ const Sfx = {
   confirm() {
     this.tone({ f0: 660, dur: 0.08, type: 'square', gain: 0.06 });
     setTimeout(() => this.tone({ f0: 990, dur: 0.12, type: 'square', gain: 0.06 }), 80);
+  },
+
+  setVolumes(music, sfx) {
+    this.musicVol = music;
+    this.sfxVol = sfx;
+    if (this.musicBus) this.musicBus.gain.value = music;
+    if (this.fx) this.fx.gain.value = sfx;
+  },
+
+  // Rising pitch as an enemy missile closes in; near is 0 (far) to 1 (about to hit).
+  lockTone(near) {
+    this.tone({ f0: 900 + near * 700, dur: 0.07, type: 'square', gain: 0.06 });
   },
 
   toggleMute() {

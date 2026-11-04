@@ -15,11 +15,23 @@ Each mission has its own original synth soundtrack, in the style of 80s TV actio
 | Operation Black Gold | Black Gold | 150 BPM | C minor |
 | Operation Red Talon | Red Talon | 116 BPM | D minor |
 
-The music starts with your first key press or click, because browsers won't play sound before that. M mutes it along with the sound effects, and it pauses while the tab is hidden. The songs are written as note data in `src/music.js`: chords, bass and drum patterns, and the melody, one bar of sixteenth notes per line. They were composed for this game, so you're free to use, change and redistribute them with it.
+Operations Lifeline, Safe Passage and Last Stand reuse the Green Hell, Sandstorm and Black Gold tracks.
+
+The music starts with your first key press or click, because browsers won't play sound before that. M mutes it along with the sound effects (the settings screen has separate volume sliders for each), and it pauses while the tab is hidden. The songs are written as note data in `src/music.js`: chords, bass and drum patterns, and the melody, one bar of sixteenth notes per line. They were composed for this game, so you're free to use, change and redistribute them with it.
 
 ## Running it
 
-Play it online at https://petrieukds.github.io/Chopper-Gunner/ (once GitHub Pages is on: in the repo go to **Settings → Pages**, set the source to **Deploy from a branch**, branch `main`, folder `/ (root)`).
+Play it online at https://petrieukds.github.io/Chopper-Gunner/. GitHub Pages republishes it a minute or two after each push to `main`.
+
+### Install it and play offline
+
+The game is a web app, so you can add it to your home screen and it opens full-screen, like an app:
+
+- **Android (Chrome):** open the link, then menu **⋮ → Add to Home screen** (or **Install app**).
+- **iPhone / iPad (Safari):** open the link, tap **Share → Add to Home Screen**.
+- **Desktop Chrome or Edge:** click the install icon at the right of the address bar.
+
+After your first visit, the game also works with no connection. A service worker (`sw.js`) keeps a copy of every file. It always tries the network first, so you get the newest version whenever you're online.
 
 To run it locally, open `index.html` in a modern browser.
 
@@ -37,7 +49,7 @@ python -m http.server 8000
 
 Then go to http://localhost:8000 (or whatever port `serve` prints).
 
-Your campaign progress, funds, upgrades, difficulty, best scores, key bindings and chosen aircraft are saved in the browser's `localStorage`.
+Your campaign progress, star ratings, funds, upgrades, difficulty, settings, best scores, key bindings and chosen aircraft are saved in the browser's `localStorage`, so each browser and device keeps its own save.
 
 ## Controls
 
@@ -52,6 +64,7 @@ Your campaign progress, funds, upgrades, difficulty, best scores, key bindings a
 | Pause | P or Esc |
 | Mute | M |
 | Rebind keys | C (on the title screen or while paused) |
+| Settings | O (on the title screen, mission select or while paused) |
 
 The mouse also works for aiming and firing. On phones and tablets you get twin-stick touch controls: the left half of the screen moves, the right half aims and fires, and there are on-screen buttons for missiles, flares, turbo and pause.
 
@@ -73,6 +86,35 @@ Any standard controller (Xbox, PlayStation and similar) works as soon as you pre
 
 Land on your base pad to repair and rearm. Your guns overheat if you hold the trigger too long. Flares break enemy missile locks.
 
+### Settings
+
+| Setting | What it does |
+| --- | --- |
+| Music volume | 0–10 |
+| Sound volume | 0–10, for everything except the music |
+| Screen shake | Turn the camera shake from explosions and hits on or off |
+| Auto-fire | Your guns fire by themselves whenever a target is in front of your nose and in range. You only have to aim. Handy on a touchpad. |
+
+### Warnings
+
+- When an enemy missile locks on, red arrows around your aircraft point at it, getting bigger and brighter as it closes. The lock tone beeps faster and higher as it gets nearer.
+- When you're hit, a red arc flashes on the side the shot came from, and the screen edges glow red.
+
+### Pickups
+
+Destroyed enemies sometimes drop a pickup. Fly over it to collect it.
+
+| Pickup | Effect |
+| --- | --- |
+| **+** Repair | +30 armour |
+| **M** Missiles | +4 missiles |
+| **F** Flares | +2 flares |
+| **2x** Double guns | Both guns fire at once for 15 seconds |
+| **S** Shield | Blocks all damage for 10 seconds |
+| **C** Cluster bomb | Your next missile press drops a cluster bomb instead. It bursts into ten bomblets that blanket the area ahead. You can carry up to three. |
+
+Active power-ups are listed under your gauges with the time left.
+
 ## Aircraft
 
 After the title screen, the hangar lets you pick your aircraft. Use ← / → (or A / D) to browse and Space to continue to mission select. With a mouse or on a touchscreen, click or tap the sides of the screen to browse and the middle to continue. Esc goes back to the title. The game remembers your choice next time.
@@ -82,6 +124,7 @@ After the title screen, the hangar lets you pick your aircraft. Use ← / → (o
 | **Stormwolf** | Attack helicopter | All-rounder: solid armour, 8 missiles, twin wing guns | Doesn't excel at anything |
 | **Kestrel** | Scout helicopter | Fastest and most agile, quick-firing gun, 7 flares, small target | Light armour, only 4 missiles |
 | **Titan** | Heavy twin-rotor gunship | Huge armour, 14 missiles, hardest-hitting guns | Slow, turns sluggishly, big target |
+| **Viper** | Prototype jet-copter | Fastest in the fleet, long-range laser bolts that barely heat up, agile | Medium armour, 6 missiles. **Locked until you clear all nine missions.** |
 
 Skywatch's radio calls use the callsign of the aircraft you're flying.
 
@@ -93,7 +136,7 @@ Every sprite is drawn in code in `src/entities.js`, lit from the top-left to mat
 
 ## Missions
 
-Each mission is fought in its own theatre, with its own island layout, ground and sea colours, plant life, weather and landmarks. Enemy vehicles are painted in matching camouflage.
+Each mission is fought in its own theatre, with its own island layout, ground and sea colours, plant life, weather and landmarks. Enemy vehicles are painted in matching camouflage. The last three missions revisit earlier theatres on new maps.
 
 | # | Mission | Theatre | Weather | Objective |
 | --- | --- | --- | --- | --- |
@@ -103,14 +146,29 @@ Each mission is fought in its own theatre, with its own island layout, ground an
 | 4 | **Operation Green Hell** | Eastern Jungle: dense canopy, muddy shores, temple ruins | Rain | Sink six gunboats patrolling the coast. Two of them fire anti-air missiles. |
 | 5 | **Operation Black Gold** | Volcanic Oil Fields: ash, pumpjacks, oil pools | Falling ash and embers | A shield protects the command bunker. Destroy its three generators to drop the shield, then destroy the bunker. |
 | 6 | **Operation Red Talon** | Red Canyons: red rock, mesas, cacti | Dust | Hunt down RED TALON, a stolen prototype gunship, and destroy it. |
+| 7 | **Operation Lifeline** | Eastern Jungle (new map) | Rain | **Rescue.** Four downed aircrew are waiting by orange smoke. Hover slowly over each one to take them aboard, then land on your base pad to bring them home. Militia search jeeps are heading for them; the mission fails if more than one is captured. |
+| 8 | **Operation Safe Passage** | Southern Desert (new map) | Blowing sand | **Escort.** Four white aid trucks drive from your base to a cut-off town. Clear the ambushes along the road. The mission fails if more than one truck is destroyed. |
+| 9 | **Operation Last Stand** | Central Valleys (new map) | Clear | **Defend.** Five waves of jeeps, tanks, gunships and jets attack your base. Keep the command building standing; it gets patched up a little between waves. |
 
 Shipwrecks lie offshore in every theatre.
 
 ### Campaign and mission select
 
-After the hangar you pick a mission. Clearing a mission unlocks the next one, and you can replay any mission you've unlocked; your best score for each is shown. On the mission select screen, ↑ / ↓ picks a mission, ← / → sets the difficulty, Space launches, U opens the workshop and Esc goes back. Everything is clickable too.
+After the hangar you pick a mission. Clearing a mission unlocks the next one, and you can replay any mission you've unlocked; your best score and star rating for each are shown. On the mission select screen, ↑ / ↓ picks a mission, ← / → sets the difficulty, Space launches, U opens the workshop, O opens settings and Esc goes back. Everything is clickable too.
 
-After the sixth mission the campaign starts over with tougher enemies.
+After the ninth mission the campaign starts over with tougher enemies, and the Viper is unlocked in the hangar.
+
+### Star ratings
+
+Each cleared mission earns up to three stars, and each bonus star adds 1500 to your score (and so to your workshop funds):
+
+| Star | How to earn it |
+| --- | --- |
+| ★ | Clear the mission |
+| ★ | Finish under the mission's par time. The clock and par time are shown under your score; the clock is green while you're still under par. |
+| ★ | Lose less than half your armour over the whole mission (repairs don't wipe the slate clean) |
+
+Mission select keeps your best rating for each mission.
 
 ### Difficulty
 
@@ -132,4 +190,4 @@ The points you score in a mission become funds. After each win you go to the wor
 | Flare pods | +1 flare | 800 / 1600 / 3000 |
 | Engine tuning | +6% speed | 1500 / 3000 / 5000 |
 
-Theatres (palette, weather, landmarks) are defined in `THEATRES` in `src/terrain.js`, missions in `src/missions.js`, difficulty and upgrades in `src/progress.js`, and weather and night lighting in `src/weather.js`.
+Theatres (palette, weather, landmarks) are defined in `THEATRES` in `src/terrain.js`, missions (with their par times) in `src/missions.js`, difficulty, upgrades and settings in `src/progress.js`, and weather and night lighting in `src/weather.js`. Friendly units (aid trucks, downed crew, the base's command building) are at the end of `src/entities.js`.

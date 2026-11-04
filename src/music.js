@@ -212,7 +212,7 @@ const Music = {
 
     this.bus = c.createGain();
     this.bus.gain.value = MUSIC_VOLUME;
-    this.bus.connect(Sfx.master);
+    this.bus.connect(Sfx.musicBus);
     // Dotted-eighth echo on the lead, a staple of the 80s sound.
     this.echo = c.createDelay(1);
     this.echo.delayTime.value = (0.75 * 60) / s.bpm;
