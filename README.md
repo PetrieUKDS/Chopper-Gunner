@@ -66,7 +66,14 @@ Your campaign progress, star ratings, funds, upgrades, difficulty, settings, bes
 | Rebind keys | C (on the title screen or while paused) |
 | Settings | O (on the title screen, mission select or while paused) |
 
-The mouse also works for aiming and firing. On phones and tablets you get twin-stick touch controls: the left half of the screen moves, the right half aims and fires, and there are on-screen buttons for missiles, flares, turbo and pause.
+The mouse also works for aiming and firing.
+
+### Phones and tablets
+
+- **Twin-stick touch controls:** drag on the left half of the screen to fly and on the right half to aim. Auto-fire is on for touch by default, so your guns fire at anything in front of you. On-screen buttons cover missiles, flares, turbo and pause.
+- **Landscape only:** if you hold the phone upright, the game pauses and asks you to rotate it. On Android it also goes full-screen on your first tap.
+- **Fits around the screen:** the buttons scale with the screen, and the HUD keeps clear of notches and the home bar.
+- **Vibration:** phones that support it buzz when you're hit.
 
 ### Gamepad
 
@@ -92,8 +99,15 @@ Land on your base pad to repair and rearm. Your guns overheat if you hold the tr
 | --- | --- |
 | Music volume | 0–10 |
 | Sound volume | 0–10, for everything except the music |
+| Auto-fire | **TOUCH** (default): on with touch controls only. **ON**: always. **OFF**: never. Your guns fire by themselves whenever a target is in front of your nose and in range, so you only have to aim. Handy on a touchpad too. |
+| Effects | **AUTO** (default) starts on high and switches to low by itself if the game runs below about 40 frames a second. **HIGH** or **LOW** fixes it. Low draws at normal resolution on high-density screens, and halves the particles and weather. |
 | Screen shake | Turn the camera shake from explosions and hits on or off |
-| Auto-fire | Your guns fire by themselves whenever a target is in front of your nose and in range. You only have to aim. Handy on a touchpad. |
+| Vibration | Buzz when you're hit, on phones that support it |
+| Training | Show the first-flight guide at the start of Operation Sandstorm. It turns itself off once you finish or skip it, so switch it back on to see it again. |
+
+### Training
+
+The first time you fly Operation Sandstorm, a five-step guide walks you through flying, firing, missiles, flares and landing on the pad to repair. The hints match whatever you're playing with: touch, gamepad or keyboard. Enemies don't send reinforcements and the par clock doesn't run until training is over. Press Tab, or tap **TAP TO SKIP**, to skip it.
 
 ### Warnings
 

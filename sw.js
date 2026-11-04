@@ -3,7 +3,7 @@
 // Offline support. Every file the game needs is cached on install. Requests go to the
 // network first, so a new version shows up as soon as you're online, and fall back to
 // the cache when you're not. Bump CACHE when the file list changes.
-const CACHE = 'chopper-gunner-v1';
+const CACHE = 'chopper-gunner-v2';
 const FILES = [
   './',
   'index.html',

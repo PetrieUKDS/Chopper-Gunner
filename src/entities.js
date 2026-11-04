@@ -1245,6 +1245,7 @@ class Player {
     this.hitFlash = 0.12;
     g.shake(5);
     Sfx.hit();
+    if (Settings.data.vibrate && Input.touchMode && navigator.vibrate) navigator.vibrate(this.hp <= 0 ? 300 : 35);
     if (this.hp <= 0) {
       this.hp = 0;
       this.dead = true;

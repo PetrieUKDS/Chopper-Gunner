@@ -49,6 +49,20 @@ function keyName(code) {
   return code.toUpperCase();
 }
 
+// The screen edges the browser reserves for notches and the home bar, from CSS env().
+function readSafeArea() {
+  let probe = document.getElementById('safe-probe');
+  if (!probe) {
+    probe = document.createElement('div');
+    probe.id = 'safe-probe';
+    probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;'
+      + 'padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
+    document.body.appendChild(probe);
+  }
+  const cs = getComputedStyle(probe);
+  return { t: parseFloat(cs.paddingTop) || 0, r: parseFloat(cs.paddingRight) || 0, b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft) || 0 };
+}
+
 // Keyboard + mouse, plus twin-stick touch controls for phones and tablets.
 const Input = {
   binds: null,
@@ -108,6 +122,7 @@ const Input = {
     if (e.pointerType === 'touch') {
       e.preventDefault();
       this.touchMode = true;
+      this.goFullscreen();
       const x = e.clientX, y = e.clientY;
       const b = this.btnLayout.find((b) => Math.hypot(x - b.x, y - b.y) < b.r + 10);
       if (b) {
@@ -172,13 +187,30 @@ const Input = {
     return { x: dx / R, y: dy / R, mag: Math.min(1, m / R) };
   },
 
-  layoutButtons(w, h) {
+  // Touch buttons grow a little on bigger screens and stay clear of notches and the home bar.
+  layoutButtons(w, h, safe = { l: 0, r: 0, t: 0, b: 0 }) {
+    const k = clamp(Math.min(w, h) / 380, 1, 1.35);
+    const rx = w - safe.r, by = h - safe.b;
+    // Landscape phones: an arc tucked into the bottom corner, clear of the radar above.
+    const short = h < 520;
     this.btnLayout = [
-      { id: 'missile', x: w - 66, y: h - 200, r: 32, label: 'MSL' },
-      { id: 'flare', x: w - 146, y: h - 236, r: 28, label: 'FLR' },
-      { id: 'turbo', x: w - 66, y: h - 282, r: 28, label: 'TRB' },
-      { id: 'pause', x: w / 2, y: h - 30, r: 18, label: 'II' },
+      { id: 'missile', x: rx - 66 * k, y: by - (short ? 70 : 190) * k, r: 34 * k, label: 'MSL' },
+      { id: 'flare', x: rx - (short ? 152 : 150) * k, y: by - (short ? 52 : 226) * k, r: 30 * k, label: 'FLR' },
+      { id: 'turbo', x: rx - (short ? 74 : 66) * k, y: by - (short ? 158 : 276) * k, r: 30 * k, label: 'TRB' },
+      { id: 'pause', x: w / 2, y: by - 30, r: 20, label: 'II' },
     ];
+  },
+
+  // First touch: go full-screen and hold landscape where the browser allows it
+  // (Android Chrome does; iPhone Safari ignores both, so there "Add to Home Screen" is the way).
+  goFullscreen() {
+    if (this.triedFullscreen) return;
+    this.triedFullscreen = true;
+    const el = document.documentElement;
+    if (document.fullscreenElement || !el.requestFullscreen || matchMedia('(display-mode: fullscreen)').matches) return;
+    el.requestFullscreen({ navigationUI: 'hide' })
+      .then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape'))
+      .catch(() => {});
   },
 
   // Standard-mapping gamepad: left stick flies, right stick aims, RT fires, LT missiles,

@@ -31,8 +31,11 @@ const Hud = {
     const p = g.player;
     const w = g.w, h = g.h;
     const small = w < 600;
+    const safe = g.safe || { l: 0, r: 0, t: 0, b: 0 };
 
-    // --- mission panel
+    // --- mission panel and gauges, kept clear of a notch on the left
+    ctx.save();
+    ctx.translate(safe.l, safe.t);
     let y = 24;
     this.text(ctx, g.mission.title, 16, y, { size: small ? 12 : 14, color: HUD_AMBER });
     y += 20;
@@ -75,12 +78,15 @@ const Hud = {
       ux += ctx.measureText(label).width + 14;
     }
 
+    ctx.restore();
+
     // --- score, and the mission clock against par (green while you're still under it)
     const clock = `${fmtTime(g.missionTime)} / PAR ${fmtTime(g.mission.par)}`;
     const clockCol = g.missionTime <= g.mission.par ? HUD_GREEN : '#9fb4c0';
+    const rx = w - 78 - safe.r;
     if (small) {
-      this.text(ctx, String(g.score).padStart(7, '0'), w - 78, 162, { size: 16, align: 'center', color: '#ffffff' });
-      this.text(ctx, clock, w - 78, 178, { size: 10, align: 'center', color: clockCol });
+      this.text(ctx, String(g.score).padStart(7, '0'), rx, 162 + safe.t, { size: 16, align: 'center', color: '#ffffff' });
+      this.text(ctx, clock, rx, 178 + safe.t, { size: 10, align: 'center', color: clockCol });
     } else {
       this.text(ctx, String(g.score).padStart(7, '0'), w / 2, 28, { size: 22, align: 'center', color: '#ffffff' });
       this.text(ctx, clock, w / 2, 46, { size: 12, align: 'center', color: clockCol });
@@ -95,7 +101,7 @@ const Hud = {
       this.bar(ctx, w / 2 - bw2 / 2, by + 6, bw2, 8, boss.hp / boss.maxHp, HUD_RED);
     }
 
-    this.radar(ctx, g, w - 78, 78, small ? 52 : 64);
+    this.radar(ctx, g, rx, 78 + safe.t, small ? 52 : 64);
 
     // --- warnings
     let wy = h * 0.28;
@@ -304,8 +310,10 @@ const Hud = {
       ctx.arc(s.ox + st.x * 60, s.oy + st.y * 60, 24, 0, TAU);
       ctx.fill();
     }
-    if (!Input.sticks.move) this.text(ctx, 'MOVE', 70, g.h - 60, { size: 12, align: 'center', color: 'rgba(255,255,255,0.35)', shadow: false });
-    if (!Input.sticks.aim) this.text(ctx, 'AIM + FIRE', g.w - 160, g.h - 60, { size: 12, align: 'center', color: 'rgba(255,255,255,0.35)', shadow: false });
+    const safe = g.safe || { l: 0, r: 0, b: 0 };
+    if (!Input.sticks.move) this.text(ctx, 'MOVE', 70 + safe.l, g.h - 60 - safe.b, { size: 12, align: 'center', color: 'rgba(255,255,255,0.35)', shadow: false });
+    const aimX = g.h < 520 ? g.w * 0.64 : g.w - 160 - safe.r; // clear of the corner buttons on short screens
+    if (!Input.sticks.aim) this.text(ctx, 'AIM + FIRE', aimX, g.h - 60 - safe.b, { size: 12, align: 'center', color: 'rgba(255,255,255,0.35)', shadow: false });
     for (const b of Input.btnLayout) {
       const held = Input.buttons[b.id] !== undefined;
       ctx.fillStyle = held ? 'rgba(255,192,74,0.45)' : 'rgba(0,0,0,0.35)';

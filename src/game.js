@@ -8,6 +8,39 @@ function fmtTime(s) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+// First-flight training, shown at the start of Operation Sandstorm until it has been
+// finished or skipped once. Each step's hint matches how you're playing (touch, pad or keys).
+const TUTORIAL = [
+  {
+    hint: (g) => (Input.touchMode ? 'Drag on the LEFT half of the screen to fly'
+      : Input.pad ? 'Push the LEFT STICK to fly'
+      : `${['up', 'left', 'down', 'right'].map((a) => Input.bindLabel(a)).join(' ')} to fly`),
+    done: (g, t) => dist(g.player.x, g.player.y, g.base.x, g.base.y) > 350,
+  },
+  {
+    hint: (g) => (Input.touchMode ? 'Drag on the RIGHT half to aim - your guns fire at anything in front of you'
+      : Input.pad ? 'RIGHT STICK aims, RIGHT TRIGGER fires the chain guns'
+      : `Aim with the MOUSE (or ${Input.bindLabel('turnLeft')} ${Input.bindLabel('turnRight')}), fire with ${Input.bindLabel('fire')} or LEFT CLICK`),
+    done: (g, t) => t.fired > 0.8,
+  },
+  {
+    hint: (g) => (Input.touchMode ? 'Tap MSL to launch a homing missile at the target in the lock box'
+      : Input.pad ? 'LEFT TRIGGER launches a homing missile at the target in the lock box'
+      : `${Input.bindLabel('missile')} or RIGHT CLICK launches a homing missile at the target in the lock box`),
+    done: (g, t) => t.missile,
+  },
+  {
+    hint: (g) => (Input.touchMode ? 'Tap FLR to drop flares - they break enemy missile locks'
+      : Input.pad ? 'RIGHT BUMPER drops flares - they break enemy missile locks'
+      : `${Input.bindLabel('flare')} drops flares - they break enemy missile locks`),
+    done: (g, t) => t.flare,
+  },
+  {
+    hint: () => 'Fly back and hover over the base pad to repair and rearm',
+    done: (g, t) => t.padT > 1.2,
+  },
+];
+
 function starString(n, of = 3) {
   return '★'.repeat(n) + '☆'.repeat(of - n);
 }
@@ -78,18 +111,41 @@ const G = {
       this.best = 0;
     }
     this.player = new Player(this.base.x, this.base.y, this.vehicle);
-    Weather.set(THEATRE.weather, this.w, this.h);
+    Weather.set(THEATRE.weather, this.w, this.h, this.lowFx() ? 0.5 : 1);
     requestAnimationFrame((t) => this.loop(t));
   },
 
   resize() {
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Low effects also renders at 1x on high-density screens, which is the biggest saving.
+    this.dpr = Math.min(window.devicePixelRatio || 1, this.lowFx() ? 1 : 2);
     this.w = window.innerWidth;
     this.h = window.innerHeight;
     this.canvas.width = Math.round(this.w * this.dpr);
     this.canvas.height = Math.round(this.h * this.dpr);
     this.zoom = clamp(Math.min(this.w, this.h) / 820, 0.55, 1.3);
-    Input.layoutButtons(this.w, this.h);
+    this.safe = readSafeArea();
+    Input.layoutButtons(this.w, this.h, this.safe);
+  },
+
+  lowFx() {
+    const e = Settings.data.effects;
+    return e === 'low' || (e === 'auto' && this.autoLow);
+  },
+
+  // AUTO effects: if play runs below ~40fps for a few seconds, drop to low effects.
+  watchFrameRate(rawDt) {
+    if (Settings.data.effects !== 'auto' || this.autoLow || this.state !== 'play' || this.stateT < 3) {
+      this.slowT = 0;
+      return;
+    }
+    this.frameAvg = this.frameAvg ? this.frameAvg * 0.95 + rawDt * 0.05 : rawDt;
+    this.slowT = this.frameAvg > 1 / 40 ? (this.slowT || 0) + rawDt : 0;
+    if (this.slowT > 4) {
+      this.autoLow = true;
+      this.resize();
+      Weather.set(THEATRE.weather, this.w, this.h, 0.5);
+      this.banner('LOW EFFECTS ON FOR SMOOTHER PLAY', '#9fb4c0');
+    }
   },
 
   // A flat-ish spot inland for the home helipad.
@@ -170,7 +226,7 @@ const G = {
     const tour = Math.floor(i / MISSIONS.length);
     this.difficulty = (1 + (i % MISSIONS.length) * 0.08 + tour * 0.4) * Save.difficulty().enemy;
     setTheatre(this.mission.theatre, this.mission.seed);
-    Weather.set(THEATRE.weather, this.w, this.h);
+    Weather.set(THEATRE.weather, this.w, this.h, this.lowFx() ? 0.5 : 1);
     this.base = this.findBase();
     this.missionStartScore = this.score;
     this.enemies = []; this.bullets = []; this.ebullets = []; this.missiles = []; this.flares = [];
@@ -188,6 +244,7 @@ const G = {
     this.hurtFlash = 0;
     this.damageTaken = 0;
     this.missionTime = 0;
+    this.tut = i === 0 && Settings.data.tutorial ? { step: 0, fired: 0, missile: false, flare: false, padT: 0, flash: 0 } : null;
     this.terrain.reset();
     this.player = new Player(this.base.x, this.base.y, this.vehicle, Save.mods());
     this.aimMode = 'keys';
@@ -291,7 +348,7 @@ const G = {
   },
 
   explode(x, y, size, o = {}) {
-    const n = Math.min(36, 6 + ((size * 0.7) | 0));
+    const n = Math.min(36, 6 + ((size * 0.7) | 0)) * (this.lowFx() ? 0.5 : 1);
     this.particles.push(new Particle(x, y, 0, 0, 0.2, size * 1.7, size * 3, 'flash'));
     if (size >= 30 || o.ring) this.particles.push(new Particle(x, y, 0, 0, 0.45, size * 0.6, size * 7, 'ring'));
     for (let i = 0; i < n; i++) {
@@ -343,6 +400,60 @@ const G = {
       if (ex.ring) this.shake(18);
     }
     this.delayed = this.delayed.filter((ex) => ex.t > 0);
+  },
+
+  // Track what the player has tried, and move the training on when a step is done.
+  updateTutorial(dt, c) {
+    const t = this.tut;
+    const p = this.player;
+    if (c.fire) t.fired += dt;
+    if (c.missile) t.missile = true;
+    if (c.flare) t.flare = true;
+    t.padT = p.onPad && t.step === TUTORIAL.length - 1 ? t.padT + dt : 0;
+    t.flash = Math.max(0, t.flash - dt);
+    if (TUTORIAL[t.step].done(this, t)) {
+      t.step++;
+      t.flash = 0.6;
+      Sfx.confirm();
+      if (t.step >= TUTORIAL.length) this.endTutorial('TRAINING COMPLETE - DESTROY THE SAM SITES');
+    }
+    if (Input.hit('Tab') || (this.tutSkip && Input.tapped && this.inBox(this.tutSkip))) this.endTutorial('TRAINING SKIPPED');
+  },
+
+  endTutorial(msg) {
+    this.tut = null;
+    this.tutSkip = null;
+    Settings.data.tutorial = false;
+    Settings.write();
+    this.banner(msg, HUD_AMBER);
+  },
+
+  inBox(b) {
+    return Input.tapX >= b.x && Input.tapX <= b.x + b.w && Input.tapY >= b.y && Input.tapY <= b.y + b.h;
+  },
+
+  drawTutorial(ctx) {
+    const t = this.tut;
+    const w = this.w, small = w < 600;
+    const text = TUTORIAL[t.step].hint(this);
+    // Short screens: low in the middle, between the touch controls and above the pause button.
+    // Otherwise near the top, between the gauges and the radar.
+    const short = this.h < 520;
+    const pw = short ? clamp(w - 380, 300, 460) : Math.min(560, w - 480);
+    const x0 = (w - pw) / 2;
+    const y0 = short ? this.h - (this.safe ? this.safe.b : 0) - 116 : small ? 214 : 70;
+    ctx.fillStyle = 'rgba(4,10,16,0.78)';
+    ctx.fillRect(x0, y0, pw, 58);
+    ctx.strokeStyle = t.flash > 0 ? HUD_GREEN : HUD_AMBER;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x0 + 0.5, y0 + 0.5, pw - 1, 57);
+    Hud.text(ctx, `TRAINING ${t.step + 1}/${TUTORIAL.length}`, x0 + 12, y0 + 18, { size: 12, color: HUD_AMBER });
+    ctx.font = `${small ? 13 : 15}px ${FONT}`;
+    const lines = this.wrap(ctx, text, pw - 24);
+    lines.slice(0, 2).forEach((l, i) => Hud.text(ctx, l, x0 + 12, y0 + 36 + i * 17, { size: small ? 13 : 15, color: '#ffffff' }));
+    const skip = Input.touchMode ? 'TAP TO SKIP' : 'TAB SKIPS';
+    Hud.text(ctx, skip, x0 + pw - 12, y0 + 18, { size: 11, align: 'right', color: '#9fb4c0' });
+    this.tutSkip = { x: x0 + pw - 110, y: y0, w: 110, h: 26 };
   },
 
   readControls(dt) {
@@ -407,7 +518,8 @@ const G = {
     }
     // Auto-fire: the guns open up on their own when a target sits in front of the nose.
     const t = this.lockTarget;
-    if (Settings.data.autofire && t && !t.dead && !p.overheat) {
+    const auto = Settings.data.autofire === null ? Input.touchMode : Settings.data.autofire;
+    if (auto && t && !t.dead && !p.overheat) {
       const ta = Math.atan2(t.y - p.y, t.x - p.x);
       if (dist(p.x, p.y, t.x, t.y) < 640 && Math.abs(angDiff(p.angle, ta)) < 0.3) c.fire = true;
     }
@@ -417,17 +529,28 @@ const G = {
   // ------------------------------------------------------------ update
 
   loop(ts) {
-    const dt = Math.min(0.033, (ts - this.last) / 1000 || 0);
+    const raw = (ts - this.last) / 1000 || 0;
+    const dt = Math.min(0.033, raw);
     this.last = ts;
+    if (raw < 0.25) this.watchFrameRate(raw); // ignore pauses from a hidden tab
     this.update(dt);
     this.render();
     Input.endFrame();
     requestAnimationFrame((t) => this.loop(t));
   },
 
+  // Touch screens held upright: ask for landscape, and pause a mission in progress.
+  portrait() {
+    return Input.touchMode && this.h > this.w;
+  },
+
   update(dt) {
     this.time += dt;
     this.stateT += dt;
+    if (this.portrait() && this.state === 'play') {
+      this.setState('paused');
+      Sfx.setRotor(false);
+    }
     Input.menuMode = this.state !== 'play' && this.state !== 'dying';
     Input.pollGamepad();
     if (this.state !== 'controls' && (Input.actionHit('mute') || Input.hit('btn_mute'))) Sfx.toggleMute();
@@ -575,11 +698,19 @@ const G = {
     const s = Settings.data;
     const vol = (k) => ({ show: () => s[k], bar: () => s[k] / 10, step: (d) => (s[k] = clamp(s[k] + d, 0, 10)) });
     const flag = (k) => ({ show: () => (s[k] ? 'ON' : 'OFF'), step: () => (s[k] = !s[k]) });
+    // Step through a fixed list of values; names maps a value to what's shown.
+    const cycle = (k, values, names) => ({
+      show: () => names[values.indexOf(s[k])],
+      step: (d) => (s[k] = values[(values.indexOf(s[k]) + d + values.length) % values.length]),
+    });
     return [
       { label: 'MUSIC VOLUME', ...vol('music') },
       { label: 'SOUND VOLUME', ...vol('sfx') },
+      { label: 'AUTO-FIRE', ...cycle('autofire', [null, true, false], ['TOUCH', 'ON', 'OFF']), note: 'Guns fire by themselves at targets ahead. TOUCH: only with touch controls' },
+      { label: 'EFFECTS', ...cycle('effects', ['auto', 'high', 'low'], ['AUTO', 'HIGH', 'LOW']), note: 'LOW cuts particles and weather for slower phones. AUTO switches if needed', apply: () => this.resize() },
       { label: 'SCREEN SHAKE', ...flag('shake') },
-      { label: 'AUTO-FIRE', ...flag('autofire'), note: 'Guns fire by themselves at targets in front of you' },
+      { label: 'VIBRATION', ...flag('vibrate'), note: 'Buzz when you are hit (phones that support it)' },
+      { label: 'TRAINING', ...flag('tutorial'), note: 'Show the first-flight guide at the start of Operation Sandstorm' },
     ];
   },
 
@@ -589,6 +720,7 @@ const G = {
     const change = (i, d) => {
       rows[i].step(d);
       Settings.write();
+      if (rows[i].apply) rows[i].apply();
       Sfx.beep();
     };
     if (Input.hit('ArrowUp') || Input.hit('KeyW')) pr.row = (pr.row + rows.length) % (rows.length + 1);
@@ -604,6 +736,10 @@ const G = {
     if (hit.kind === 'step') {
       pr.row = hit.i;
       change(hit.i, hit.d);
+    } else if (hit.kind === 'row') {
+      // Tapping the row itself steps a switch forward, or just selects a slider.
+      if (pr.row === hit.i && !rows[hit.i].bar) change(hit.i, 1);
+      pr.row = hit.i;
     } else if (hit.kind === 'back') this.setState(pr.from);
   },
 
@@ -614,9 +750,11 @@ const G = {
     const rows = this.settingRows();
     const pw = Math.min(520, w - 24);
     const x0 = (w - pw) / 2;
-    const rowH = small ? 50 : 56;
+    // Rows shrink to fit short (landscape phone) screens; the notes go when there's no room.
+    const rowH = clamp((h - 130) / rows.length, 34, small ? 50 : 56);
+    const notes = rowH >= 48 && !small;
     const hits = [];
-    let y = Math.max(50, (h - rowH * rows.length - 150) / 2);
+    let y = Math.max(rowH < 44 ? 30 : 50, (h - rowH * rows.length - 150) / 2);
     Hud.text(ctx, 'SETTINGS', w / 2, y, { size: small ? 22 : 30, align: 'center', font: TITLE_FONT, weight: '900', color: HUD_AMBER });
     y += 30;
     rows.forEach((r, i) => {
@@ -630,8 +768,8 @@ const G = {
         ctx.strokeRect(x0 + 0.5, ry + 0.5, pw - 1, rowH - 7);
       }
       const mid = ry + (rowH - 6) / 2;
-      Hud.text(ctx, r.label, x0 + 14, mid + (r.note ? -3 : 5), { size: small ? 13 : 15, color: sel ? '#ffffff' : '#c8d6dc' });
-      if (r.note && !small) Hud.text(ctx, r.note, x0 + 14, mid + 13, { size: 11, color: '#9fb4c0' });
+      Hud.text(ctx, r.label, x0 + 14, mid + (r.note && notes ? -3 : 5), { size: small ? 13 : 15, color: sel ? '#ffffff' : '#c8d6dc' });
+      if (r.note && notes) Hud.text(ctx, r.note, x0 + 14, mid + 13, { size: 11, color: '#9fb4c0' });
       // ◀ value ▶ on the right, each arrow a tap target.
       const vx = x0 + pw - 120;
       Hud.text(ctx, '◀', vx - 52, mid + 6, { size: 18, align: 'center', color: HUD_GREEN });
@@ -639,8 +777,9 @@ const G = {
       if (r.bar) Hud.bar(ctx, vx - 34, mid - 4, 68, 9, r.bar(), HUD_GREEN);
       else Hud.text(ctx, r.show(), vx, mid + 6, { size: 16, align: 'center', color: r.show() === 'ON' ? HUD_GREEN : '#9fb4c0' });
       hits.push({ kind: 'step', i, d: -1, x: vx - 76, y: ry, w: 46, h: rowH - 6 }, { kind: 'step', i, d: 1, x: vx + 30, y: ry, w: 46, h: rowH - 6 });
+      hits.push({ kind: 'row', i, x: x0, y: ry, w: pw, h: rowH - 6 });
     });
-    const by = y + rows.length * rowH + 8;
+    const by = y + rows.length * rowH + 4;
     const bs = this.prefs.row === rows.length;
     ctx.strokeStyle = bs ? HUD_AMBER : HUD_GREEN;
     ctx.lineWidth = bs ? 2 : 1.5;
@@ -648,7 +787,7 @@ const G = {
     Hud.text(ctx, 'BACK', w / 2, by + 22, { size: 14, align: 'center', color: bs ? HUD_AMBER : HUD_GREEN });
     hits.push({ kind: 'back', x: w / 2 - 80, y: by, w: 160, h: 34 });
     if (!Input.touchMode) {
-      Hud.text(ctx, '↑↓ SELECT   ←→ CHANGE   ESC BACK', w / 2, Math.min(h - 14, by + 62), { size: 12, align: 'center', color: '#9fb4c0' });
+      if (by + 60 < h) Hud.text(ctx, '↑↓ SELECT   ←→ CHANGE   ESC BACK', w / 2, by + 60, { size: 12, align: 'center', color: '#9fb4c0' });
     }
     this.menuHits = hits;
   },
@@ -945,6 +1084,7 @@ const G = {
     const p = this.player;
     const c = (this.controls = this.readControls(dt));
     if (!p.dead) p.update(dt, this, c);
+    if (this.tut && this.state === 'play') this.updateTutorial(dt, c);
     this.lockTarget = p.dead ? null : this.computeLock(c);
 
     for (const e of this.enemies) {
@@ -952,7 +1092,7 @@ const G = {
       e.update(dt, this);
       // Badly damaged units trail smoke, and catch fire when nearly finished.
       const hpf = e.hp / e.maxHp;
-      if (hpf < 0.45 && Math.random() < dt * (e.air ? 14 : 7)) {
+      if (hpf < 0.45 && Math.random() < dt * (e.air ? 14 : 7) * (this.lowFx() ? 0.4 : 1)) {
         this.particles.push(new Particle(e.x + rand(-5, 5), e.y + rand(-5, 5), rand(-10, 10), rand(-10, 10), rand(1, 1.8), rand(4, 7), 12, 'smoke'));
         if (hpf < 0.2) this.particles.push(new Particle(e.x + rand(-4, 4), e.y + rand(-4, 4), 0, 0, 0.3, rand(3, 6), 4, 'fire'));
       }
@@ -986,7 +1126,8 @@ const G = {
     this.flares = this.flares.filter((f) => !f.dead);
     this.pickups = this.pickups.filter((pk) => !pk.dead);
     this.particles = this.particles.filter((pt) => !pt.dead);
-    if (this.particles.length > 1600) this.particles.splice(0, this.particles.length - 1600);
+    const cap = this.lowFx() ? 600 : 1600;
+    if (this.particles.length > cap) this.particles.splice(0, this.particles.length - cap);
     this.floaters = this.floaters.filter((f) => f.t > 0);
     this.emitters = this.emitters.filter((em) => em.life > 0);
     this.banners = this.banners.filter((b) => b.t > 0);
@@ -1015,7 +1156,7 @@ const G = {
     for (const hm of this.hitMarks) hm.t -= dt * 1.1;
     this.hitMarks = this.hitMarks.filter((hm) => hm.t > 0).slice(-8);
     this.hurtFlash = Math.max(0, this.hurtFlash - dt * 1.8);
-    if (this.state === 'play') this.missionTime += dt;
+    if (this.state === 'play' && !this.tut) this.missionTime += dt; // training doesn't count against par
 
     // Camera leads toward where you are aiming and flying.
     if (!p.dead) {
@@ -1132,6 +1273,7 @@ const G = {
 
   reinforce(dt) {
     const r = this.mission.reinforce;
+    if (this.tut) return; // no reinforcements during training
     this.reinforceT -= dt;
     if (this.reinforceT > 0) return;
     this.reinforceT = r.every / Math.sqrt(this.difficulty);
@@ -1226,6 +1368,7 @@ const G = {
       case 'briefing': this.drawBriefing(ctx); break;
       default:
         Hud.draw(ctx, this);
+        if (this.tut && this.state === 'play') this.drawTutorial(ctx);
         if (this.state === 'play' && !Input.touchMode && !this.player.dead) {
           if (this.aimMode === 'keys') {
             const p = this.player;
@@ -1237,6 +1380,25 @@ const G = {
         if (this.state === 'complete') this.drawComplete(ctx);
         if (this.state === 'failed') this.drawFailed(ctx);
     }
+    if (this.portrait()) this.drawRotate(ctx);
+  },
+
+  drawRotate(ctx) {
+    this.dim(ctx, 0.92);
+    const w = this.w, h = this.h;
+    // A phone outline turning on its side.
+    const a = (-Math.PI / 2) * clamp(((this.time * 0.8) % 2) - 0.5, 0, 1);
+    ctx.save();
+    ctx.translate(w / 2, h * 0.42);
+    ctx.rotate(a);
+    ctx.strokeStyle = HUD_AMBER;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.roundRect(-28, -48, 56, 96, 9);
+    ctx.stroke();
+    ctx.restore();
+    Hud.text(ctx, 'ROTATE YOUR PHONE', w / 2, h * 0.42 + 90, { size: 20, align: 'center', font: TITLE_FONT, weight: '900', color: HUD_AMBER });
+    Hud.text(ctx, 'The game plays in landscape', w / 2, h * 0.42 + 118, { size: 14, align: 'center', color: '#c8d6dc' });
   },
 
   drawBase(ctx) {

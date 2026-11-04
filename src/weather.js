@@ -17,11 +17,12 @@ const Weather = {
   lastCam: null,
   dark: null,
 
-  set(kind, w, h) {
+  // density: 1 for full weather, 0.5 with low effects.
+  set(kind, w, h, density = 1) {
     this.kind = kind;
     this.flakes = [];
     this.lastCam = null;
-    for (let i = 0; i < WEATHER[kind].count; i++) this.flakes.push(this.spawn(w, h, true));
+    for (let i = 0; i < WEATHER[kind].count * density; i++) this.flakes.push(this.spawn(w, h, true));
   },
 
   spawn(w, h, anywhere) {
@@ -145,7 +146,9 @@ const Weather = {
   // Night: darken the world, then cut light out of the dark around the player's
   // searchlight, headlights, fires, tracers and flares.
   drawNight(ctx, g) {
-    const W = g.canvas.width, H = g.canvas.height;
+    // The lights are soft gradients, so low effects draws the dark layer at half size.
+    const k = g.lowFx() ? 0.5 : 1;
+    const W = Math.round(g.canvas.width * k), H = Math.round(g.canvas.height * k);
     if (!W || !H) return; // window hidden or minimised
     if (!this.dark) this.dark = document.createElement('canvas');
     const c = this.dark;
@@ -160,7 +163,7 @@ const Weather = {
     d.fillStyle = 'rgba(3,8,22,0.84)';
     d.fillRect(0, 0, W, H);
     d.globalCompositeOperation = 'destination-out';
-    const z = g.zoom, dpr = g.dpr;
+    const z = g.zoom, dpr = g.dpr * k;
     const cx = g.cam.x + g.shakeX, cy = g.cam.y + g.shakeY;
     d.setTransform(z * dpr, 0, 0, z * dpr, (g.w / 2 - cx * z) * dpr, (g.h / 2 - cy * z) * dpr);
     const vx0 = cx - g.w / z / 2 - 300, vx1 = cx + g.w / z / 2 + 300;
@@ -218,7 +221,7 @@ const Weather = {
 
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(c, 0, 0);
+    ctx.drawImage(c, 0, 0, g.canvas.width, g.canvas.height);
     ctx.restore();
   },
 };
