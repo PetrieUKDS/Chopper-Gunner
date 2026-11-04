@@ -21,7 +21,7 @@ The music starts with your first key press or click, because browsers won't play
 
 ## Running it
 
-Play it online at https://petrieukds.github.io/Chopper-Gunner/. GitHub Pages republishes it a minute or two after each push to `main`.
+Play it online at https://petrieukds.github.io/Talon-Strike/. GitHub Pages republishes it a minute or two after each push to `main`.
 
 ### Install it and play offline
 
