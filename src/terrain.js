@@ -465,6 +465,7 @@ function drawLandmarkShape(g, kind) {
 class Terrain {
   constructor() {
     this.chunks = new Map();
+    this.previews = new Map(); // rough stand-ins for chunks not built yet
     this.landmarks = new Map();
     this.roads = [];
     this.decals = [];
@@ -477,6 +478,7 @@ class Terrain {
 
   reset() {
     this.chunks.clear();
+    this.previews.clear();
     this.landmarks.clear();
     this.roads = [];
     this.decals = [];
@@ -509,6 +511,32 @@ class Terrain {
     const entries = [...this.chunks.entries()].sort((a, b) => a[1].used - b[1].used);
     const remove = entries.length - Math.floor(MAX_CHUNKS * 0.8);
     for (let i = 0; i < remove; i++) this.chunks.delete(entries[i][0]);
+    if (this.previews.size > MAX_CHUNKS * 2) this.previews.clear();
+  }
+
+  // A 16x16 sketch of a chunk's ground colours: cheap enough to make straight away, so a chunk
+  // still waiting to be built shows its coast and hills, blurred, instead of one flat square.
+  preview(cx, cy) {
+    const k = cx + ',' + cy;
+    let c = this.previews.get(k);
+    if (c) return c;
+    const n = 16, s = CHUNK / n;
+    c = document.createElement('canvas');
+    c.width = c.height = n;
+    const g = c.getContext('2d');
+    const img = g.createImageData(n, n);
+    const col = [0, 0, 0];
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        const x = cx * CHUNK + (i + 0.5) * s, y = cy * CHUNK + (j + 0.5) * s;
+        terrainColor(heightAt(x, y), moistAt(x, y), col);
+        const p = (j * n + i) * 4;
+        img.data[p] = col[0]; img.data[p + 1] = col[1]; img.data[p + 2] = col[2]; img.data[p + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    this.previews.set(k, c);
+    return c;
   }
 
   gen(cx, cy) {
@@ -599,6 +627,10 @@ class Terrain {
     const h = heightAt(x, y);
     if (roll < 0.05 && h < SEA_LEVEL - 0.05) return { kind: 'wreck', x, y, rot, r: 40 };
     if (roll > 0.13 || h < SHORE + 0.02 || h > HILLS - 0.02) return null;
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * TAU, hh = heightAt(x + Math.cos(a) * 60, y + Math.sin(a) * 60);
+      if (hh < SHORE + 0.01 || hh > HILLS) return null;
+    }
     if (this.roads.length && this.nearRoad(x, y, 80)) return null;
     const kinds = THEATRE.landmarks;
     return { kind: kinds[Math.floor(pickR * kinds.length)], x, y, rot, r: 55 };
@@ -714,11 +746,19 @@ class Terrain {
         if (canvas) {
           ctx.drawImage(canvas, cx * CHUNK, cy * CHUNK, CHUNK + 0.6, CHUNK + 0.6);
         } else {
-          const col = [0, 0, 0];
-          const mx = cx * CHUNK + CHUNK / 2, my = cy * CHUNK + CHUNK / 2;
-          terrainColor(heightAt(mx, my), moistAt(mx, my), col);
-          ctx.fillStyle = `rgb(${col[0] | 0},${col[1] | 0},${col[2] | 0})`;
-          ctx.fillRect(cx * CHUNK, cy * CHUNK, CHUNK + 0.6, CHUNK + 0.6);
+          ctx.imageSmoothingEnabled = true;
+          ctx.drawImage(this.preview(cx, cy), cx * CHUNK, cy * CHUNK, CHUNK + 0.6, CHUNK + 0.6);
+        }
+      }
+    }
+    // With budget to spare, build one chunk of the ring just outside the view, so flying
+    // into it finds it ready.
+    if (budget > 0) {
+      for (let cy = cy0 - 1; cy <= cy1 + 1; cy++) {
+        for (let cx = cx0 - 1; cx <= cx1 + 1; cx++) {
+          if (cx < 0 || cy < 0 || cx > maxC || cy > maxR || this.chunks.has(cx + ',' + cy)) continue;
+          this.getChunk(cx, cy, true);
+          return;
         }
       }
     }

@@ -1161,12 +1161,10 @@ class Player {
         const ox = this.x + ca * gun.x - sa * gun.y * this.gunSide;
         const oy = this.y + sa * gun.x + ca * gun.y * this.gunSide;
         let a = this.angle;
-        // Keyboard players get a little help: rounds bend onto a target that is nearly dead ahead.
-        const t = g.lockTarget;
-        if (c.assist && t) {
-          const ta = Math.atan2(t.y - oy, t.x - ox);
-          if (Math.abs(angDiff(this.angle, ta)) < 0.22) a = ta;
-        }
+        // Keyboard, pad and auto-fire players get a little help: rounds bend onto where a
+        // target nearly dead ahead will be when they get there.
+        const t = c.gunTarget;
+        if (c.assist && t) a += clamp(angDiff(this.angle, Math.atan2(t.y - oy, t.x - ox)), -t.cone, t.cone);
         a += rand(-0.035, 0.035);
         const sp = gun.speed || 980;
         g.bullets.push(new Bullet(ox, oy, Math.cos(a) * sp + this.vx * 0.5, Math.sin(a) * sp + this.vy * 0.5, 'p', gun.dmg, (gun.range || 690) / sp, gun.kind));

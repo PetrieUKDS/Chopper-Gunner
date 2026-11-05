@@ -519,14 +519,39 @@ const G = {
       c.flare = c.flare || pad.flareHit;
       c.turbo = c.turbo || pad.turbo;
     }
-    // Auto-fire: the guns open up on their own when a target sits in front of the nose.
-    const t = this.lockTarget;
+    // Auto-fire: the guns open up on their own at whatever sits in front of the nose, and
+    // the rounds get the same steer onto it that keyboard and pad players get.
     const auto = Settings.data.autofire === null ? Input.touchMode : Settings.data.autofire;
-    if (auto && t && !t.dead && !p.overheat) {
-      const ta = Math.atan2(t.y - p.y, t.x - p.x);
-      if (dist(p.x, p.y, t.x, t.y) < 640 && Math.abs(angDiff(p.angle, ta)) < 0.3) c.fire = true;
+    c.gunTarget = this.gunTarget(p);
+    if (auto && c.gunTarget && !p.overheat) {
+      c.fire = true;
+      c.assist = true;
     }
     return c;
+  },
+
+  // The enemy the guns would hit: in range, with either where it is or where it will be when
+  // the rounds arrive inside a cone ahead of the nose (wider for big targets). Favours near and
+  // central ones. cone is how far rounds may be steered off the nose towards it.
+  gunTarget(p) {
+    if (p.dead) return null;
+    const gun = p.vehicle.gun, sp = gun.speed || 980, range = (gun.range || 690) * 0.95;
+    let best = null, bs = Infinity;
+    for (const e of this.enemies) {
+      if (e.dead || e.gone) continue;
+      const d = dist(p.x, p.y, e.x, e.y);
+      if (d > range + e.r) continue;
+      const t = d / sp;
+      const lx = e.x + (e.mvx || 0) * t, ly = e.y + (e.mvy || 0) * t;
+      const cone = 0.32 + Math.atan2(e.r, Math.max(d, 1));
+      const offNow = Math.abs(angDiff(p.angle, Math.atan2(e.y - p.y, e.x - p.x)));
+      const offLead = Math.abs(angDiff(p.angle, Math.atan2(ly - p.y, lx - p.x)));
+      const off = Math.min(offNow, offLead);
+      if (off > cone) continue;
+      const s = d * (1 + off * 3);
+      if (s < bs) { bs = s; best = { e, x: lx, y: ly, cone }; }
+    }
+    return best;
   },
 
   // ------------------------------------------------------------ update
@@ -830,7 +855,9 @@ const G = {
   updateHangar() {
     const ids = Object.keys(VEHICLES);
     const step = (d) => {
-      const i = (ids.indexOf(this.pickId()) + d + ids.length) % ids.length;
+      let i = (ids.indexOf(this.pickId()) + d + ids.length) % ids.length;
+      // Going left from the first aircraft skips past locked ones, so they only show up at the end.
+      while (d < 0 && i === ids.length - 1 && vehicleLocked(VEHICLES[ids[i]])) i--;
       this.vehicle = VEHICLES[ids[i]];
       this.player = new Player(this.base.x, this.base.y, this.vehicle);
       if (!vehicleLocked(this.vehicle)) {
@@ -1123,7 +1150,13 @@ const G = {
 
     for (const e of this.enemies) {
       if (e.dead) continue;
+      const ox = e.x, oy = e.y;
       e.update(dt, this);
+      // Measured velocity, smoothed, so the guns can lead a target whatever moves it.
+      if (dt > 0) {
+        e.mvx = lerp(e.mvx || 0, (e.x - ox) / dt, 0.3);
+        e.mvy = lerp(e.mvy || 0, (e.y - oy) / dt, 0.3);
+      }
       // Badly damaged units trail smoke, and catch fire when nearly finished.
       const hpf = e.hp / e.maxHp;
       if (hpf < 0.45 && Math.random() < dt * (e.air ? 14 : 7) * (this.lowFx() ? 0.4 : 1)) {
@@ -1567,9 +1600,11 @@ const G = {
     const vs = (sc * 20) / v.r; // fit big and small airframes to the same pad
     const locked = vehicleLocked(v);
     v.draw(ctx, w / 2 + 8 * sc, cy + 10 * sc, spin, rotor, { shadow: true, scale: vs * 0.92 });
-    // A locked aircraft shows only as a dark silhouette.
-    if (locked) v.draw(ctx, w / 2, cy, spin, rotor, { body: '#0c0e10', dark: '#0c0e10', accent: '#0c0e10', glass: '#0c0e10', scale: vs });
-    else v.draw(ctx, w / 2, cy, spin, rotor, { ...v.colors, scale: vs });
+    // A locked aircraft shows only as a dark silhouette with a padlock.
+    if (locked) {
+      this.drawSilhouette(ctx, v, w / 2, cy, pr, spin, rotor, vs);
+      this.drawPadlock(ctx, w / 2, cy, 14 * Math.min(sc, 1.8));
+    } else v.draw(ctx, w / 2, cy, spin, rotor, { ...v.colors, scale: vs });
 
     // Arrows either side.
     const ax = Math.min(w * 0.38, 280);
@@ -1585,9 +1620,9 @@ const G = {
     }
 
     let y = cy + pr + (small ? 26 : 34);
-    Hud.text(ctx, v.name, w / 2, y, { size: small ? 22 : 30, align: 'center', font: TITLE_FONT, weight: '900', color: '#e9ecef' });
+    Hud.text(ctx, v.name, w / 2, y, { size: small ? 22 : 30, align: 'center', font: TITLE_FONT, weight: '900', color: locked ? '#6c7780' : '#e9ecef' });
     y += small ? 20 : 24;
-    Hud.text(ctx, v.role, w / 2, y, { size: small ? 12 : 14, align: 'center', color: HUD_AMBER });
+    Hud.text(ctx, locked ? `LOCKED \u2022 ${v.role}` : v.role, w / 2, y, { size: small ? 12 : 14, align: 'center', color: locked ? HUD_RED : HUD_AMBER });
     y += small ? 20 : 24;
     ctx.font = `${small ? 12 : 14}px ${FONT}`;
     for (const line of this.wrap(ctx, v.blurb, Math.min(520, w - 40))) {
@@ -1614,11 +1649,17 @@ const G = {
 
     // Which of the fleet this is.
     y += 10;
-    list.forEach((_, i) => {
-      ctx.fillStyle = i === idx ? HUD_AMBER : 'rgba(255,255,255,0.25)';
+    list.forEach((u, i) => {
       ctx.beginPath();
       ctx.arc(w / 2 + (i - (list.length - 1) / 2) * 16, y, i === idx ? 4.5 : 3.5, 0, TAU);
-      ctx.fill();
+      if (vehicleLocked(u)) {
+        ctx.strokeStyle = i === idx ? HUD_RED : 'rgba(255,90,90,0.55)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = i === idx ? HUD_AMBER : 'rgba(255,255,255,0.25)';
+        ctx.fill();
+      }
     });
 
     if (locked) {
@@ -1631,6 +1672,45 @@ const G = {
     if (Math.floor(this.time * 2) % 2 === 0) {
       Hud.text(ctx, prompt, w / 2, Math.min(h - 24, y + (small ? 34 : 44)), { size: small ? 12 : 16, align: 'center', color: HUD_GREEN });
     }
+  },
+
+  // Draws an aircraft off-screen and paints it one flat colour, so nothing of its livery,
+  // lights or glow shows through.
+  drawSilhouette(ctx, v, x, y, r, spin, rotor, scale) {
+    const d = this.dpr, size = Math.ceil(r * 2 * d);
+    const c = this.silCanvas || (this.silCanvas = document.createElement('canvas'));
+    if (c.width !== size) c.width = c.height = size;
+    const sx = c.getContext('2d');
+    sx.setTransform(1, 0, 0, 1, 0, 0);
+    sx.globalCompositeOperation = 'source-over';
+    sx.clearRect(0, 0, size, size);
+    sx.setTransform(d, 0, 0, d, 0, 0);
+    v.draw(sx, r, r, spin, rotor, { ...v.colors, scale });
+    sx.setTransform(1, 0, 0, 1, 0, 0);
+    sx.globalCompositeOperation = 'source-in';
+    sx.fillStyle = '#0b0d0f';
+    sx.fillRect(0, 0, size, size);
+    ctx.drawImage(c, x - r, y - r, r * 2, r * 2);
+  },
+
+  drawPadlock(ctx, x, y, s) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.strokeStyle = HUD_RED;
+    ctx.lineWidth = s * 0.22;
+    ctx.beginPath();
+    ctx.arc(0, -s * 0.25, s * 0.42, Math.PI, 0);
+    ctx.lineTo(s * 0.42, s * 0.05);
+    ctx.moveTo(-s * 0.42, s * 0.05);
+    ctx.lineTo(-s * 0.42, -s * 0.25);
+    ctx.stroke();
+    ctx.fillStyle = HUD_RED;
+    ctx.fillRect(-s * 0.7, 0, s * 1.4, s * 1.05);
+    ctx.fillStyle = '#0b0d0f';
+    ctx.beginPath();
+    ctx.arc(0, s * 0.42, s * 0.16, 0, TAU);
+    ctx.fill();
+    ctx.restore();
   },
 
   drawBriefing(ctx) {

@@ -5,24 +5,65 @@
 // Optional: seed (a fresh map in a reused theatre), update(g, dt) each frame of play,
 // failText for the failure screen.
 
-// A winding road from start to end, added to the map.
-function windingRoad(g, start, end) {
+const roadDry = (x, y) => heightAt(x, y) > SHORE + 0.025;
+
+// Share of a road that runs over water, sampled every 20px.
+function roadWet(path) {
+  let wet = 0, n = 0;
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1], b = path[i], L = Math.hypot(b.x - a.x, b.y - a.y);
+    for (let s = 0; s < L; s += 20, n++) if (!roadDry(lerp(a.x, b.x, s / L), lerp(a.y, b.y, s / L))) wet++;
+  }
+  return n ? wet / n : 0;
+}
+
+// One winding route from start to end. Bends that land in the sea are slid sideways onto land.
+function roadShape(start, end, amp, wob) {
   const path = [];
-  const n = 9;
+  const n = 14;
   const nx = -(end.y - start.y), ny = end.x - start.x;
   const nl = Math.hypot(nx, ny) || 1;
-  const wob = rand(0, TAU);
   for (let i = 0; i <= n; i++) {
     const t = i / n;
-    const off = i === 0 || i === n ? 0 : Math.sin(t * Math.PI * 2 + wob) * 260 * Math.sin(t * Math.PI);
-    path.push({
-      x: clamp(lerp(start.x, end.x, t) + (nx / nl) * off, 120, WORLD_W - 120),
-      y: clamp(lerp(start.y, end.y, t) + (ny / nl) * off, 120, WORLD_H - 120),
-    });
+    const off = i === 0 || i === n ? 0 : Math.sin(t * Math.PI * 2 + wob) * amp * Math.sin(t * Math.PI);
+    let x = lerp(start.x, end.x, t) + (nx / nl) * off, y = lerp(start.y, end.y, t) + (ny / nl) * off;
+    if (i > 0 && i < n && !roadDry(x, y)) {
+      for (let k = 1; k <= 16; k++) {
+        const s = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 45;
+        if (roadDry(x + (nx / nl) * s, y + (ny / nl) * s)) {
+          x += (nx / nl) * s;
+          y += (ny / nl) * s;
+          break;
+        }
+      }
+    }
+    path.push({ x: clamp(x, 120, WORLD_W - 120), y: clamp(y, 120, WORLD_H - 120) });
   }
-  g.terrain.roads.push(path);
   return path;
 }
+
+// A winding road between the points pickStart() and pickEnd(start) give, added to the map.
+// Tries several starts, ends and shapes and keeps the one that stays most on dry land.
+function windingRoad(g, pickStart, pickEnd) {
+  let best = null;
+  for (let a = 0; a < 8 && !(best && best.wet === 0); a++) {
+    const start = pickStart();
+    for (let e = 0; e < 6 && !(best && best.wet === 0); e++) {
+      const end = pickEnd(start);
+      for (let k = 0; k < 10; k++) {
+        const path = roadShape(start, end, k ? rand(60, 320) : 260, rand(0, TAU));
+        const wet = roadWet(path);
+        if (!best || wet < best.wet) best = { path, start, end, wet };
+        if (wet === 0) break;
+      }
+    }
+  }
+  g.terrain.roads.push(best.path);
+  return best;
+}
+
+// The road point a share t (0 to 1) of the way along.
+const roadAt = (path, t) => path[Math.round(t * (path.length - 1))];
 
 function aliveCount(list, type) {
   return list.filter((o) => o instanceof type && !o.dead).length;
@@ -79,9 +120,8 @@ const MISSIONS = [
     failText: 'Too many trucks crossed the border.',
     reinforce: { every: 12, cap: 16, types: ['gunship', 'jeep', 'jet'] },
     setup(g) {
-      const start = g.landPoint(g.base, 1700, 2400);
-      const end = g.landPoint(start, 2600, 3600, (p) => dist(p.x, p.y, g.base.x, g.base.y) > 1400);
-      const path = windingRoad(g, start, end);
+      const { path, start, end } = windingRoad(g, () => g.landPoint(g.base, 1700, 2400),
+        (s) => g.landPoint(s, 2600, 3600, (p) => dist(p.x, p.y, g.base.x, g.base.y) > 1400));
       g.checkpoint = end;
       g.checkpointLabel = 'BORDER';
       g.allowedEscapes = 2;
@@ -309,15 +349,14 @@ const MISSIONS = [
     failText: 'Too many aid trucks were destroyed.',
     reinforce: { every: 13, cap: 16, types: ['jeep', 'gunship', 'tank'] },
     setup(g) {
-      const start = g.landPoint(g.base, 700, 900);
-      const end = g.landPoint(start, 2800, 3600, (p) => dist(p.x, p.y, g.base.x, g.base.y) > 1800);
-      const path = windingRoad(g, start, end);
+      const { path, end } = windingRoad(g, () => g.landPoint(g.base, 700, 900),
+        (s) => g.landPoint(s, 2800, 3600, (p) => dist(p.x, p.y, g.base.x, g.base.y) > 1800));
       g.checkpoint = end;
       g.checkpointLabel = 'TOWN';
       for (let i = 0; i < 4; i++) g.friendlies.push(new AidTruck(path, 40 + (3 - i) * 90));
       // Ambush squads waiting off the road.
       for (const k of [3, 4, 6, 8]) {
-        const pt = path[k];
+        const pt = roadAt(path, k / 9);
         for (let j = 0; j < 2; j++) g.spawnNear('jeep', pt, 220, 420);
         g.spawnNear(k % 2 ? 'tank' : 'aa', pt, 200, 380);
       }
